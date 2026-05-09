@@ -132,12 +132,12 @@ ALLOWED_ORIGINS=http://localhost
 DB_PATH=/app/data/console.db
 NATS_SYS_JWT=%s
 NATS_SYS_NKEY=%s
-	JS_ACCOUNT_NAME=CONSOLE_JS
+JS_ACCOUNT_NAME=CONSOLE_JS
 OPERATOR_NKEY=%s
 
 # WEB
-VITE_API_BASE=
-	`, sysUserJWT, string(sysAccountSeed), string(operatorSeed))
+WEB_BASE_PATH=/
+`, sysUserJWT, string(sysAccountSeed), string(operatorSeed))
 	writeFile(envPath, []byte(envFile), 0600)
 
 	// --- Write seeds to keys/ (backup/recovery only) ---

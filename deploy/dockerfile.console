@@ -2,6 +2,9 @@
 FROM node:22-alpine AS web-builder
 WORKDIR /src/web
 
+ARG WEB_BASE_PATH=/
+ENV WEB_BASE_PATH=${WEB_BASE_PATH}
+
 COPY web/package*.json ./
 RUN npm install
 

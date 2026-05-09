@@ -8,7 +8,7 @@ import StreamsPage from "./pages/StreamsPage";
 function App() {
     return (
         <AuthProvider>
-            <BrowserRouter>
+            <BrowserRouter basename={import.meta.env.BASE_URL}>
                 <Routes>
                     <Route path="/" element={<LoginPage />} />
                     <Route path="/dashboard" element={<DashboardLayout />}>

@@ -38,7 +38,7 @@ nats-console/
 │   │   ├── context/
 │   │   │   └── AuthContext.tsx   # JWT token + role state (sessionStorage)
 │   │   ├── hooks/
-│   │   │   └── useApiBase.ts     # Reads VITE_API_BASE env var
+│   │   │   └── useApiBase.ts     # Derives API prefix from router base path
 │   │   ├── pages/            # Route-level page components
 │   │   │   ├── DashboardLayout.tsx  # Outer layout with sidebar
 │   │   │   ├── LoginPage.tsx
@@ -115,7 +115,7 @@ Stores the console JWT token and the user's role (`admin`, `operator`, `viewer`)
 
 ### `web/src/hooks/useApiBase`
 
-Returns the API base URL from `VITE_API_BASE`. All API calls in components use this hook to build request URLs.
+Returns the API prefix derived from the app base path. All API calls in components use this hook so API routes follow `<WEB_BASE_PATH>/api` automatically.
 
 ---
 

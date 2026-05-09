@@ -62,9 +62,9 @@ If legacy `deploy/keys/js-account.nk` or `deploy/keys/js-account.jwt` files are 
 
 ### Web (`web/`)
 
-| Variable        | Default   | Description                                                                 |
-| --------------- | --------- | --------------------------------------------------------------------------- |
-| `VITE_API_BASE` | _(empty)_ | API base URL. Empty means same-origin and works with the Nginx `/api` proxy |
+| Variable        | Default | Description                                                                 |
+| --------------- | ------- | --------------------------------------------------------------------------- |
+| `WEB_BASE_PATH` | `/`     | App mount path. API path is derived automatically as `<WEB_BASE_PATH>/api`. |
 
 ## Volumes
 
@@ -75,11 +75,11 @@ If legacy `deploy/keys/js-account.nk` or `deploy/keys/js-account.jwt` files are 
 
 ## Ports
 
-| Port   | Service                                      |
-| ------ | -------------------------------------------- |
-| `4222` | NATS client                                  |
-| `8222` | NATS monitoring                              |
-| `80`   | App entrypoint (Nginx: `/` web, `/api/` API) |
+| Port   | Service                                                                  |
+| ------ | ------------------------------------------------------------------------ |
+| `4222` | NATS client                                                              |
+| `8222` | NATS monitoring                                                          |
+| `80`   | App entrypoint (Nginx: `<WEB_BASE_PATH>` web, `<WEB_BASE_PATH>/api` API) |
 
 ## Deployment Image (`deploy/Dockerfile`)
 
@@ -87,7 +87,7 @@ A single multi-stage image packages the full application:
 
 1. **web-builder** (Node 22) — `npm run build` produces `/src/web/dist`
 2. **api-builder** (Go 1.25) — compiles `nats-console-api` binary
-3. **Final** (Nginx 1.27) — serves static files, proxies `/api/` to `localhost:8080`
+3. **Final** (Nginx 1.27) — serves static files, proxies `<WEB_BASE_PATH>/api/` to `localhost:8080/api/`
 
 `deploy/entrypoint.sh` starts the API process in the background and Nginx in the foreground. Nginx stdout/stderr is the container's main log stream (API errors go to stderr which Nginx captures).
 

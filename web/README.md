@@ -15,10 +15,18 @@ npm install
 npm run dev
 ```
 
-The dev server starts at `http://localhost:5173` and proxies nothing — the browser calls the API directly. Set `VITE_API_BASE` if the API is on a different host or port:
+The dev server starts at `http://localhost:5173`.
+
+`WEB_BASE_PATH` controls both web mount path and API prefix:
+
+- `/` -> web on `/`, API on `/api`
+- `/console` -> web on `/console`, API on `/console/api`
+- `/test/` -> web on `/test`, API on `/test/api`
+
+The Vite dev server proxies `<WEB_BASE_PATH>/api` to `http://localhost:8080`, so no separate API base variable is needed.
 
 ```bash
-VITE_API_BASE=http://my-api-host:8080 npm run dev
+WEB_BASE_PATH=/console npm run dev
 ```
 
 ## Build
@@ -37,7 +45,7 @@ src/
 ├── context/
 │   └── AuthContext.tsx   # JWT token + role state
 ├── hooks/
-│   └── useApiBase.ts     # Reads VITE_API_BASE
+│   └── useApiBase.ts     # Derives API prefix from base path
 ├── pages/                # One file per route
 │   ├── DashboardLayout.tsx
 │   ├── LoginPage.tsx
@@ -87,7 +95,7 @@ const res = await fetch(`${base}/api/v1/accounts`, {
 });
 ```
 
-This ensures the API host is always read from `VITE_API_BASE` and never hardcoded in components.
+This ensures API calls always follow `<WEB_BASE_PATH>/api` and are never hardcoded in components.
 
 ## Adding a New Feature
 
