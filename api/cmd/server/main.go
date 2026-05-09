@@ -21,7 +21,7 @@ func extractOperatorPublicKey(operatorSeed string) (string, error) {
 	if operatorSeed == "" {
 		return "", errors.New("OPERATOR_NKEY is required")
 	}
-	kp, err := nkeys.FromSeed(operatorSeed)
+	kp, err := nkeys.FromSeed([]byte(operatorSeed))
 	if err != nil {
 		return "", err
 	}

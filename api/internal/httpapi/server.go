@@ -803,7 +803,7 @@ func (s *Server) listAccounts(w http.ResponseWriter, _ *http.Request) {
 	s.refreshNATSCapabilitiesIfStale(2 * time.Second)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	jsAccountName := strings.TrimSpace(s.cfg.JSAccountName)
+	jsAccountName := strings.TrimSpace(config.JSAccountName)
 	list := make([]accountRecord, 0, len(s.accounts))
 	for _, acc := range s.accounts {
 		if !acc.IsSystem && !strings.EqualFold(acc.Name, jsAccountName) {
@@ -1288,7 +1288,7 @@ func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) isJetStreamManagedAccount(operator, accountPublicKey string) bool {
-	jsAccountName := strings.TrimSpace(s.cfg.JSAccountName)
+	jsAccountName := strings.TrimSpace(config.JSAccountName)
 	if jsAccountName == "" {
 		return false
 	}
