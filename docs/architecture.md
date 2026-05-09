@@ -38,19 +38,19 @@ The API connects to NATS using a dynamically generated user credential:
 | POST   | `/api/v1/streams/{name}/consumers`            | Create a consumer on a stream |
 | DELETE | `/api/v1/streams/{name}/consumers/{consumer}` | Delete a consumer             |
 
-All JetStream endpoints accept an optional `?accountPublicKey=` query parameter. When provided, the server routes operations through the matching account's NATS connection instead of the default `JS_ACCOUNT_NAME` managed account.
+All JetStream endpoints accept an optional `?accountPublicKey=` query parameter. When provided, the server routes operations through the matching account's NATS connection instead of the default `CONSOLE_JS` managed account.
 
 #### Default JetStream account lifecycle
 
-- On startup, `EnsureJetStreamAccountAndConnect()` looks for an account whose name matches `JS_ACCOUNT_NAME` under the current operator.
-- If that account does not exist, the API creates it, signs its JWT with the operator NKey, pushes it to the NATS full resolver, and opens the default JetStream connection.
-- The bootstrap step does not pre-create this account or store `js-account.*` seed/JWT artifacts anymore.
+- On startup, `EnsureJetStreamAccountAndConnect()` looks for an account whose name matches `CONSOLE_JS` under the current operator.
+- The account must already exist in NATS (no automatic account creation).
+- The API updates/signs account claims with the operator NKey and opens the default JetStream connection.
 
 #### Account-scoped JetStream connections
 
 - The `Server` struct holds an `accountConns map[string]*nats.Conn` connection pool keyed by account public key.
 - `getOrCreateAccountConn(publicKey, signingKeySeed)` reuses an existing live connection or creates a new one (5 s timeout), then stores it in the pool.
-- `jetStreamForRequest(w, r)` reads `accountPublicKey` from the query string: if empty, falls back to `s.jsConn` (the account named by `JS_ACCOUNT_NAME`); otherwise looks up the account in memory, validates `JSEnabled`, retrieves the signing key, and delegates to `getOrCreateAccountConn`.
+- `jetStreamForRequest(w, r)` reads `accountPublicKey` from the query string: if empty, falls back to `s.jsConn` (the account named `CONSOLE_JS`); otherwise looks up the account in memory, validates `JSEnabled`, retrieves the signing key, and delegates to `getOrCreateAccountConn`.
 - Per-request NATS connection creation (and the associated deadline-exceeded errors) is eliminated by connection reuse.
 
 ### Publish

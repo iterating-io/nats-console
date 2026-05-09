@@ -37,6 +37,6 @@ COPY --from=api-builder /bin/nats-console-api /usr/local/bin/nats-console-api
 COPY deploy/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-EXPOSE 80
+EXPOSE 9222
 
 ENTRYPOINT ["/entrypoint.sh"]

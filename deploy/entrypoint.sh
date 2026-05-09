@@ -31,7 +31,7 @@ generate_nginx_conf() {
 	if [ "$base_path" = "/" ]; then
 		cat > /etc/nginx/conf.d/default.conf <<'EOF'
 server {
-	listen 80;
+	listen 9222;
 	server_name _;
 
 	access_log off;
@@ -41,7 +41,7 @@ server {
 	index index.html;
 
 	location /api/ {
-		proxy_pass http://localhost:8080;
+		proxy_pass http://localhost:9322;
 		proxy_http_version 1.1;
 		proxy_set_header Upgrade $http_upgrade;
 		proxy_set_header Connection $connection_upgrade;
@@ -63,7 +63,7 @@ EOF
 
 	cat > /etc/nginx/conf.d/default.conf <<EOF
 server {
-	listen 80;
+	listen 9222;
 	server_name _;
 
 	access_log off;
@@ -82,7 +82,7 @@ server {
 
 	location ${api_prefix}/ {
 		rewrite ^${base_path}(/api/.*)$ \$1 break;
-		proxy_pass http://localhost:8080;
+		proxy_pass http://localhost:9322;
 		proxy_http_version 1.1;
 		proxy_set_header Upgrade \$http_upgrade;
 		proxy_set_header Connection \$connection_upgrade;

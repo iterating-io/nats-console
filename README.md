@@ -1,132 +1,168 @@
 # NATS Console
 
-A web-based management console for NATS Operator mode.
+A web-based management console for connecting to an existing NATS Operator setup.
 
-It helps you run and operate a local NATS environment from a browser, including:
+Console connects to a running NATS server and provides UI for:
 
-- Operator, account, and user lifecycle management
+- Account and user management
 - JetStream stream and consumer management
-- User-scoped publish testing
-- On-demand NATS user creds export
+- User credentials export (Copy or Download)
+- On-demand publish testing
+
+## Prerequisites
+
+NATS server must be configured with:
+
+- **Operator mode** enabled (operator JWT and system account configured)
+- **Full resolver** (`type: full` in resolver config) for account JWT persistence
+- `allow_delete: true` in resolver config (for UI account deletion support)
+- Pre-provisioned system account NKey seed (`NATS_SYS_NKEY`)
+- Pre-provisioned operator NKey seed (`OPERATOR_NKEY`)
+- JetStream account `CONSOLE_JS` created and enabled under operator
 
 ## Features
 
-- Operator, account, and user management with account pub/sub and user publish allow rules
-- Account delete with resolver capability guard and system-account protection
-- User creds export with Copy and Download actions
+- Account and user lifecycle management with pub/sub and publish allow rules
+- User credentials export and creds file download
 - JetStream stream and consumer CRUD
-- Dashboard publish test and live server heartbeat
+- Dashboard publish test and live heartbeat
 - Role-based access: admin, operator, viewer
 
-## Quick Start
+## Deployment
 
-Prerequisites:
-
-- Docker and Docker Compose
-- Go (for bootstrap generation)
+Build the console image:
 
 ```bash
-./run.sh up
+docker build -f deploy/dockerfile.console -t nats-console:latest .
 ```
 
-First run behavior:
-
-1. Generates operator/system credentials and config in `deploy/` and root `.env`
-2. Starts NATS first and waits for health
-3. Starts API and the Nginx entrypoint
-
-No external nsc tooling is required.
-
-| Service      | URL                         |
-| ------------ | --------------------------- |
-| App          | http://localhost            |
-| API health   | http://localhost/api/health |
-| NATS monitor | http://localhost:8222       |
-
-## Default Accounts
-
-Use these local development accounts to sign in:
-
-| Username | Password | Role     | Permissions                    |
-| -------- | -------- | -------- | ------------------------------ |
-| admin    | admin    | admin    | Full access including publish  |
-| operator | operator | operator | Manage accounts/users, publish |
-| viewer   | viewer   | viewer   | Read-only                      |
-
-## Common Workflow
-
-1. Start stack: ./run.sh up
-2. Login as admin
-3. Create account under selected operator
-4. Set account publish/subscribe subjects and create users with publish subjects
-5. Export creds from user row when needed
-6. Test publish as user in Dashboard
-
-## Account Delete Behavior
-
-Account delete is controlled by NATS resolver config.
-
-- If allow_delete is true in deploy/auth.conf, delete is enabled
-- If allow_delete is false, the UI disables delete action and API rejects delete requests
-- System account is always protected and cannot be deleted
-
-## Generated Artifacts
-
-The startup/bootstrap flow manages these files:
-
-- deploy/auth.conf
-- .env
-- deploy/keys/operator.nk
-- deploy/keys/sys-account.nk
-- deploy/keys/sys-user.nk
-- deploy/keys/sys-account.jwt
-
-The startup script also checks auth identity consistency between auth.conf and keys.
-If mismatch is detected, it re-bootstraps and clears stale volumes.
-
-## Commands
+Run with pre-provisioned NATS credentials:
 
 ```bash
-./run.sh down      # Stop all services
-./run.sh restart   # Rebuild and restart
-./run.sh logs      # Follow logs
-./run.sh clean     # Remove containers, images, and volumes
+docker run -d \
+  -e NATS_URL=nats://nats.example.com:4222 \
+  -e NATS_SYS_NKEY=Sxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+  -e OPERATOR_NKEY=SOxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \
+  -e ADMIN_ID=admin \
+  -e ADMIN_PASSWORD=securepassword \
+  -e ALLOWED_ORIGINS=https://console.example.com \
+  -p 9222:9222 \
+  -v console-data:/app/data \
+  nats-console:latest
 ```
 
-## Troubleshooting
+Environment variables must be provided from your existing NATS operator/account setup:
 
-Operators or accounts are empty after restart:
+- `NATS_URL`: NATS server connection URL
+- `NATS_SYS_NKEY`: System account NKey seed (pre-provisioned in NATS)
+- `OPERATOR_NKEY`: Operator NKey seed (pre-provisioned in NATS)
+- `ADMIN_ID`: Console admin username (e.g., `admin`)
+- `ADMIN_PASSWORD`: Console admin password
+- `ALLOWED_ORIGINS`: CORS allowed origins (e.g., your domain)
+- `WEB_BASE_PATH`: URL base path (default: `/`, optional)
 
-- Cause: auth artifacts drift (auth.conf, .env, keys)
-- Action: run ./run.sh up again (bootstrap consistency check will repair)
+Access the console at `https://console.example.com` or `http://localhost:9222`.
 
-Deleted account reappears after restart:
+| Port | Purpose                       |
+| ---- | ----------------------------- |
+| 9222 | Console web interface (Nginx) |
 
-- Cause: resolver delete disabled
-- Action: set allow_delete: true in deploy/auth.conf and restart
+## Usage
 
-Too many old SYS accounts appear:
+1. Access console at configured URL (e.g., http://localhost:9222)
+2. Login with admin account
+3. Manage accounts and users under your operator
+4. Create JetStream streams and consumers
+5. Export user credentials from UI (Copy or Download)
+6. Test publish operations in Dashboard
 
-- Cause: stale resolver volume from previous identity sets
-- Action: run ./run.sh clean, then ./run.sh up
+## Account Deletion
 
-## Documentation
+Account delete is controlled by NATS resolver config (`allow_delete` in `deploy/auth.conf`):
 
-| Document                                     | Description                                             |
-| -------------------------------------------- | ------------------------------------------------------- |
-| [docs/structure.md](docs/structure.md)       | Directory layout and how each part fits together        |
-| [docs/architecture.md](docs/architecture.md) | System design, data models, and API reference           |
-| [docs/operations.md](docs/operations.md)     | Environment variables, deployment, and credential setup |
-| [web/README.md](web/README.md)               | Web UI development setup and component guide            |
+- If `allow_delete: true`: accounts can be deleted via UI
+- If `allow_delete: false`: delete action is disabled and API rejects delete requests
+- System account is always protected
+
+## Docker Image
+
+`deploy/dockerfile.console` builds a single image containing:
+
+- React web frontend
+- Go API server
+- Nginx reverse proxy
+
+See Deployment section for usage.
+
+## Environment Variables
+
+Configuration through environment variables:
+
+| Variable        | Default    | Purpose                             |
+| --------------- | ---------- | ----------------------------------- |
+| NATS_URL        | (required) | NATS server connection URL          |
+| NATS_SYS_NKEY   | (required) | System account NKey seed            |
+| OPERATOR_NKEY   | (required) | Operator NKey seed                  |
+| ADMIN_ID        | (required) | Admin console username              |
+| ADMIN_PASSWORD  | (required) | Admin console password              |
+| ALLOWED_ORIGINS | `*`        | CORS allowed origins                |
+| WEB_BASE_PATH   | `/`        | URL base path (e.g., /nats-console) |
+
+## Account Management
+
+- Manage accounts and users under existing operators
+- Export credentials via UI (Copy or Download)
+- Grant JetStream capability to accounts
+
+## Docker Compose Example
+
+For quick testing with an external NATS:
+
+```yaml
+services:
+    console:
+        image: nats-console:latest
+        environment:
+            NATS_URL: nats://nats.example.com:4222
+            NATS_SYS_NKEY: ${NATS_SYS_NKEY}
+            OPERATOR_NKEY: ${OPERATOR_NKEY}
+            ADMIN_ID: admin
+            ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+            ALLOWED_ORIGINS: https://console.example.com
+        ports:
+            - "9222:9222"
+        volumes:
+            - console-data:/app/data
+
+volumes:
+    console-data:
+```
+
+Run with:
+
+```bash
+export NATS_SYS_NKEY="Sxxxxxxxxxx..."
+export OPERATOR_NKEY="SOxxxxxxxxxx..."
+export ADMIN_PASSWORD="securepassword"
+docker-compose up
+```
 
 ## Notes
 
-- This project is for local/development operations.
-- Generated keys and the root `.env` contain sensitive seeds. Do not commit them.
+- Requires NATS Operator mode with FULL resolver and pre-provisioned `NATS_SYS_NKEY` and `OPERATOR_NKEY`
+- CONSOLE_JS account must be created and JetStream-enabled in NATS before console startup
+- Database (`/app/data/console.db` inside container) persists user records; mount volume to preserve across restarts
+- Port 9222 is the only exposed port; API (9322) runs internally behind Nginx
 
-## Contributing
+## Documentation
 
-1. Read [docs/structure.md](docs/structure.md) for a tour of the codebase.
-2. Read [docs/architecture.md](docs/architecture.md) for design decisions and API contracts.
-3. api is a Go module and web is a Vite + React + TypeScript app.
-4. PRs and issues are welcome.
+- [docs/operations.md](docs/operations.md) — Deployment and configuration details
+- [docs/architecture.md](docs/architecture.md) — System design and API reference
+
+## Development
+
+For developers:
+
+- [web/README.md](web/README.md) — Web UI development setup
+- Read [docs/architecture.md](docs/architecture.md) for design and API contracts
+- `api` is a Go module; `web` is a Vite + React + TypeScript app

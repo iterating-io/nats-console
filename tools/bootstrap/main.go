@@ -125,15 +125,13 @@ resolver_preload: {
 	// Do NOT commit this file — it contains private NKey seeds.
 	envPath := filepath.Clean(filepath.Join(*outDir, "..", ".env"))
 	envFile := fmt.Sprintf(`# API
-API_PORT=8080
-JWT_SECRET=change-me-local-secret
 NATS_URL=nats://nats:4222
 ALLOWED_ORIGINS=http://localhost
-DB_PATH=/app/data/console.db
 NATS_SYS_JWT=%s
 NATS_SYS_NKEY=%s
-JS_ACCOUNT_NAME=CONSOLE_JS
 OPERATOR_NKEY=%s
+ADMIN_ID=admin
+ADMIN_PASSWORD=admin
 
 # WEB
 WEB_BASE_PATH=/

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log"
 	"net/http"
 	"time"
@@ -15,11 +16,29 @@ import (
 	"github.com/taek/nats-console/api/internal/store"
 )
 
+// extractOperatorPublicKey derives the public key from an operator NKey seed.
+func extractOperatorPublicKey(operatorSeed string) (string, error) {
+	if operatorSeed == "" {
+		return "", errors.New("OPERATOR_NKEY is required")
+	}
+	kp, err := nkeys.FromSeed(operatorSeed)
+	if err != nil {
+		return "", err
+	}
+	return kp.PublicKey()
+}
+
 func main() {
 	cfg := config.Load()
-	jwtSvc := auth.NewService(cfg.JWTSecret)
 
-	st, err := store.New(cfg.DBPath)
+	// Extract operator public key for JWT signing
+	operatorPubKey, err := extractOperatorPublicKey(cfg.OperatorNKey)
+	if err != nil {
+		log.Fatalf("extract operator public key: %v", err)
+	}
+	jwtSvc := auth.NewService(operatorPubKey)
+
+	st, err := store.New(config.DBPath)
 	if err != nil {
 		log.Fatalf("store: %v", err)
 	}
@@ -98,7 +117,7 @@ func main() {
 		log.Printf("NATS connected: %s", natsConn.ConnectedUrl())
 	}
 
-	addr := ":" + cfg.Port
+	addr := ":" + config.APIPort
 	log.Printf("API listening on %s (NATS: %s)", addr, cfg.NATSURL)
 	if err := http.ListenAndServe(addr, server.Routes()); err != nil {
 		log.Fatalf("server error: %v", err)

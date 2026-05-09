@@ -167,27 +167,21 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	users := map[string]struct {
-		Password string
-		Role     string
-	}{
-		"admin":    {Password: "admin", Role: "admin"},
-		"operator": {Password: "operator", Role: "operator"},
-		"viewer":   {Password: "viewer", Role: "viewer"},
-	}
-	user, ok := users[req.Username]
-	if !ok || user.Password != req.Password {
+
+	// Only admin account is supported; other roles are managed through NATS console UI
+	if req.Username != s.cfg.AdminID || req.Password != s.cfg.AdminPassword {
 		writeError(w, http.StatusUnauthorized, "invalid credentials")
 		return
 	}
-	token, err := s.jwtSvc.Issue(req.Username, user.Role)
+
+	token, err := s.jwtSvc.Issue(req.Username, "admin")
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to issue token")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"accessToken": token,
-		"role":        user.Role,
+		"role":        "admin",
 	})
 }
 
@@ -238,10 +232,7 @@ func (s *Server) EnsureJetStreamAccountAndConnect() error {
 	s.jsConnMu.Lock()
 	defer s.jsConnMu.Unlock()
 
-	jsAccountName := strings.TrimSpace(s.cfg.JSAccountName)
-	if jsAccountName == "" {
-		return fmt.Errorf("JS_ACCOUNT_NAME not configured")
-	}
+	jsAccountName := config.JSAccountName
 	if s.cfg.OperatorNKey == "" {
 		return fmt.Errorf("OPERATOR_NKEY not configured")
 	}
@@ -267,31 +258,7 @@ func (s *Server) EnsureJetStreamAccountAndConnect() error {
 	s.mu.RUnlock()
 
 	if target == nil {
-		accountKP, err := nkeys.CreateAccount()
-		if err != nil {
-			return fmt.Errorf("create jetstream account keypair: %w", err)
-		}
-		pubKey, err := accountKP.PublicKey()
-		if err != nil {
-			return fmt.Errorf("derive jetstream account public key: %w", err)
-		}
-		seed, err := accountKP.Seed()
-		if err != nil {
-			return fmt.Errorf("export jetstream account seed: %w", err)
-		}
-		if err := s.store.SaveAccountSigningKey(operatorName, jsAccountName, pubKey, string(seed)); err != nil {
-			return fmt.Errorf("persist jetstream account signing key: %w", err)
-		}
-		record := accountRecord{
-			Name:      jsAccountName,
-			Operator:  operatorName,
-			PublicKey: pubKey,
-			IsSystem:  false,
-		}
-		s.mu.Lock()
-		s.accounts = append(s.accounts, record)
-		s.mu.Unlock()
-		target = &record
+		return fmt.Errorf("default JetStream account %q not found under operator %q", jsAccountName, operatorName)
 	}
 
 	claims, err := s.lookupAccountClaims(target.PublicKey)

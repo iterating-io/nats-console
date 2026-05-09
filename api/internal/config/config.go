@@ -2,29 +2,34 @@ package config
 
 import "os"
 
+// JSAccountName is the hardcoded JetStream account name.
+const JSAccountName = "CONSOLE_JS"
+
+// APIPort is the hardcoded API server port.
+const APIPort = "9322"
+
+// DBPath is the hardcoded SQLite database path.
+const DBPath = "/app/data/console.db"
+
 // Config holds runtime settings for the API service.
 type Config struct {
-	Port           string
-	JWTSecret      string
 	NATSURL        string
 	NATSSysNKey    string
-	JSAccountName  string
 	OperatorNKey   string
 	AllowedOrigins string
-	DBPath         string
+	AdminID        string
+	AdminPassword  string
 }
 
-// Load reads configuration from environment variables with safe defaults for local development.
+// Load reads configuration from environment variables.
 func Load() Config {
 	cfg := Config{
-		Port:           getEnv("API_PORT", "8080"),
-		JWTSecret:      getEnv("JWT_SECRET", "change-me-local-secret"),
-		NATSURL:        getEnv("NATS_URL", "nats://localhost:4222"),
+		NATSURL:        getEnv("NATS_URL", ""),
 		NATSSysNKey:    getEnv("NATS_SYS_NKEY", ""),
-		JSAccountName:  getEnv("JS_ACCOUNT_NAME", "CONSOLE_JS"),
 		OperatorNKey:   getEnv("OPERATOR_NKEY", ""),
-		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "http://localhost:5173"),
-		DBPath:         getEnv("DB_PATH", "./data/console.db"),
+		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "*"),
+		AdminID:        getEnv("ADMIN_ID", ""),
+		AdminPassword:  getEnv("ADMIN_PASSWORD", ""),
 	}
 	return cfg
 }
