@@ -26,7 +26,23 @@ go.work.sum
 
 # env file
 .env
+.env.prod
+
+# Node.js
+node_modules/
+web/node_modules/
+web/dist/
 
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Generated NATS operator credentials (created by tools/bootstrap on first run)
+deploy/auth.conf
+deploy/.env.nats
+deploy/.env.operator
+deploy/keys/
+
+# Local Go build outputs
+api/main
+api/server

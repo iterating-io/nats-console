@@ -1,0 +1,39 @@
+# Build web (React)
+FROM node:22-alpine AS web-builder
+WORKDIR /src/web
+
+COPY web/package*.json ./
+RUN npm install
+
+COPY web/ ./
+RUN npm run build
+
+# Build API (Go)
+FROM golang:1.25-alpine AS api-builder
+WORKDIR /app
+
+COPY api/go.mod api/go.sum ./
+RUN go mod download
+
+COPY api/ ./
+RUN CGO_ENABLED=0 GOOS=linux go build -o /bin/nats-console-api ./cmd/server
+
+# Final image: Nginx + API binary + static files
+FROM nginx:1.27-alpine
+
+# Copy nginx config
+COPY deploy/nginx/default.conf /etc/nginx/conf.d/default.conf
+
+# Copy web static files
+COPY --from=web-builder /src/web/dist /usr/share/nginx/html
+
+# Copy API binary
+COPY --from=api-builder /bin/nats-console-api /usr/local/bin/nats-console-api
+
+# Entrypoint script to run both nginx and API
+COPY deploy/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 80
+
+ENTRYPOINT ["/entrypoint.sh"]

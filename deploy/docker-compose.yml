@@ -1,0 +1,31 @@
+services:
+    nats:
+        image: nats:2.11-alpine
+        command: ["-c", "/etc/nats/nats.conf", "-m", "8222"]
+        volumes:
+            - ./nats.conf:/etc/nats/nats.conf:ro
+            - ./auth.conf:/etc/nats/auth.conf:ro
+            - nats-resolver:/data/nats/resolver
+        ports:
+            - "4222:4222"
+            - "8222:8222"
+
+    app:
+        build:
+            context: ..
+            dockerfile: deploy/Dockerfile
+        env_file:
+            - ../.env
+        environment:
+            API_PORT: "8080"
+            DB_PATH: "/app/data/console.db"
+        ports:
+            - "80:80"
+        volumes:
+            - console-data:/app/data
+        depends_on:
+            - nats
+
+volumes:
+    nats-resolver:
+    console-data:
