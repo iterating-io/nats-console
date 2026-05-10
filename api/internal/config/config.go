@@ -2,9 +2,6 @@ package config
 
 import "os"
 
-// JSAccountName is the hardcoded JetStream account name.
-const JSAccountName = "CONSOLE_JS"
-
 // APIPort is the hardcoded API server port.
 const APIPort = "9322"
 

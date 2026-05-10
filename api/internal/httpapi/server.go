@@ -36,20 +36,18 @@ type accountRecord struct {
 }
 
 type Server struct {
-	cfg                   config.Config
-	jwtSvc                *auth.Service
-	natsConn              *nats.Conn
-	jsConn                *nats.Conn
-	upgrader              websocket.Upgrader
-	store                 *store.Store
-	jsConnMu              sync.Mutex
-	mu                    sync.RWMutex
-	operators             []operatorRecord
-	accounts              []accountRecord
-	capabilities          serverCapabilities
+	cfg           config.Config
+	jwtSvc        *auth.Service
+	natsConn      *nats.Conn
+	upgrader      websocket.Upgrader
+	store         *store.Store
+	mu            sync.RWMutex
+	operators     []operatorRecord
+	accounts      []accountRecord
+	capabilities  serverCapabilities
 	capabilitiesCheckedAt time.Time
-	accountConns          map[string]*nats.Conn
-	accountConnsMu        sync.Mutex
+	accountConns  map[string]*nats.Conn
+	accountConnsMu sync.Mutex
 }
 
 type serverCapabilities struct {
@@ -85,12 +83,6 @@ func (s *Server) SetNATSConn(nc *nats.Conn) {
 	s.mu.Unlock()
 }
 
-func (s *Server) SetJetStreamConn(nc *nats.Conn) {
-	s.mu.Lock()
-	s.jsConn = nc
-	s.mu.Unlock()
-}
-
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.health)
@@ -103,8 +95,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/streams/{name}/consumers", s.withAuth(s.listConsumers))
 	mux.HandleFunc("POST /api/v1/streams/{name}/consumers", s.withAuth(s.createConsumer))
 	mux.HandleFunc("DELETE /api/v1/streams/{name}/consumers/{consumer}", s.withAuth(s.deleteConsumer))
-	mux.HandleFunc("GET /api/v1/system/jetstream-status", s.withAuth(s.getJetStreamStatus))
-	mux.HandleFunc("POST /api/v1/system/grant-jetstream", s.withAuth(s.grantJetStream))
 	mux.HandleFunc("POST /api/v1/publish", s.withAuth(s.publish))
 	mux.HandleFunc("GET /api/ws", s.ws)
 	mux.HandleFunc("GET /api/v1/operators", s.withAuth(s.listOperators))
@@ -185,140 +175,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) getJetStreamStatus(w http.ResponseWriter, r *http.Request) {
-	if s.jsConn == nil || !s.jsConn.IsConnected() {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"enabled":        false,
-			"grantSupported": true,
-			"reason":         "jetstream app account not connected",
-		})
-		return
-	}
-	js, err := s.jsConn.JetStream()
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"enabled":        false,
-			"grantSupported": true,
-			"reason":         err.Error(),
-		})
-		return
-	}
-	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
-	defer cancel()
-	_, err = js.AccountInfo(nats.Context(ctx))
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{
-			"enabled":        false,
-			"grantSupported": true,
-			"reason":         err.Error(),
-		})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"enabled":        true,
-		"grantSupported": true,
-	})
-}
 
-func (s *Server) grantJetStream(w http.ResponseWriter, _ *http.Request) {
-	if err := s.EnsureJetStreamAccountAndConnect(); err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-func (s *Server) EnsureJetStreamAccountAndConnect() error {
-	s.jsConnMu.Lock()
-	defer s.jsConnMu.Unlock()
-
-	jsAccountName := config.JSAccountName
-	if s.cfg.OperatorNKey == "" {
-		return fmt.Errorf("OPERATOR_NKEY not configured")
-	}
-	if s.natsConn == nil || !s.natsConn.IsConnected() {
-		return fmt.Errorf("nats is not connected")
-	}
-
-	operatorName := s.currentOperatorName()
-	if operatorName == "" {
-		operatorName = "default"
-	}
-
-	var target *accountRecord
-	s.mu.RLock()
-	for i := range s.accounts {
-		acc := s.accounts[i]
-		if acc.Operator == operatorName && strings.EqualFold(acc.Name, jsAccountName) {
-			a := acc
-			target = &a
-			break
-		}
-	}
-	s.mu.RUnlock()
-
-	if target == nil {
-		return fmt.Errorf("default JetStream account %q not found under operator %q", jsAccountName, operatorName)
-	}
-
-	claims, err := s.lookupAccountClaims(target.PublicKey)
-	if err != nil {
-		claims = natsjwt.NewAccountClaims(target.PublicKey)
-	}
-	claims.Name = jsAccountName
-	claims.IssuedAt = time.Now().Unix()
-	claims.Limits.JetStreamLimits.DiskStorage = -1
-	claims.Limits.JetStreamLimits.MemoryStorage = -1
-	claims.Limits.JetStreamLimits.Streams = -1
-	claims.Limits.JetStreamLimits.Consumer = -1
-
-	opKP, err := nkeys.FromSeed([]byte(s.cfg.OperatorNKey))
-	if err != nil {
-		return fmt.Errorf("invalid OPERATOR_NKEY")
-	}
-	if _, err := s.pushAccountClaimsToNATS(claims, opKP); err != nil {
-		return fmt.Errorf("failed to update jetstream account claims: %w", err)
-	}
-
-	signingKey, err := s.ensureAccountSigningKey(operatorName, target.PublicKey)
-	if err != nil {
-		return fmt.Errorf("prepare jetstream account signing key: %w", err)
-	}
-
-	userJWT, userSeed, err := generateUserJWTForAccount(signingKey.Seed, target.PublicKey)
-	if err != nil {
-		return fmt.Errorf("generate jetstream user JWT: %w", err)
-	}
-	jsOpts := []nats.Option{
-		nats.Name("nats-console-api-js"),
-		nats.Timeout(5 * time.Second),
-		nats.ReconnectWait(3 * time.Second),
-		nats.MaxReconnects(-1),
-		nats.RetryOnFailedConnect(true),
-		nats.UserJWT(
-			func() (string, error) { return userJWT, nil },
-			func(nonce []byte) ([]byte, error) {
-				kp, err := nkeys.FromSeed(userSeed)
-				if err != nil {
-					return nil, err
-				}
-				return kp.Sign(nonce)
-			},
-		),
-	}
-
-	jsConn, err := nats.Connect(s.cfg.NATSURL, jsOpts...)
-	if err != nil {
-		return fmt.Errorf("connect jetstream account: %w", err)
-	}
-	old := s.jsConn
-	s.SetJetStreamConn(jsConn)
-	if old != nil {
-		old.Close()
-	}
-	log.Printf("EnsureJetStreamAccountAndConnect: jetstream account ready: %s/%s", operatorName, jsAccountName)
-	return nil
-}
 
 func generateUserJWTForAccount(accountSigningSeed, accountPublicKey string) (userJWT string, userSeed []byte, err error) {
 	accountKP, err := nkeys.FromSeed([]byte(accountSigningSeed))
@@ -373,24 +230,11 @@ func (s *Server) currentOperatorName() string {
 	return strings.TrimSpace(serverInfo.Server.Operator)
 }
 
-func (s *Server) jetStream(w http.ResponseWriter) (nats.JetStreamContext, bool) {
-	if s.jsConn == nil || !s.jsConn.IsConnected() {
-		writeError(w, http.StatusBadGateway, "jetstream account is not connected")
-		return nil, false
-	}
-	js, err := s.jsConn.JetStream()
-	if err != nil {
-		writeError(w, http.StatusBadGateway, "jetstream unavailable")
-		return nil, false
-	}
-	return js, true
-}
-
 func (s *Server) jetStreamForRequest(w http.ResponseWriter, r *http.Request) (nats.JetStreamContext, func(), bool) {
 	accountPublicKey := strings.TrimSpace(r.URL.Query().Get("accountPublicKey"))
 	if accountPublicKey == "" {
-		js, ok := s.jetStream(w)
-		return js, func() {}, ok
+		writeError(w, http.StatusBadRequest, "accountPublicKey query parameter is required")
+		return nil, nil, false
 	}
 
 	s.mu.RLock()
@@ -470,10 +314,6 @@ func (s *Server) getOrCreateAccountConn(accountPublicKey, signingKeySeed string)
 }
 
 func (s *Server) listStreams(w http.ResponseWriter, r *http.Request) {
-	if strings.TrimSpace(r.URL.Query().Get("accountPublicKey")) == "" && (s.jsConn == nil || !s.jsConn.IsConnected()) {
-		writeJSON(w, http.StatusOK, map[string]any{"streams": []string{}})
-		return
-	}
 	js, cleanup, ok := s.jetStreamForRequest(w, r)
 	if !ok {
 		return
@@ -803,10 +643,9 @@ func (s *Server) listAccounts(w http.ResponseWriter, _ *http.Request) {
 	s.refreshNATSCapabilitiesIfStale(2 * time.Second)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	jsAccountName := strings.TrimSpace(config.JSAccountName)
 	list := make([]accountRecord, 0, len(s.accounts))
 	for _, acc := range s.accounts {
-		if !acc.IsSystem && !strings.EqualFold(acc.Name, jsAccountName) {
+		if !acc.IsSystem {
 			list = append(list, acc)
 		}
 	}
@@ -1235,10 +1074,6 @@ func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "system account cannot be deleted")
 		return
 	}
-	if s.isJetStreamManagedAccount(operator, accountPublicKey) {
-		writeError(w, http.StatusForbidden, "jetstream managed account cannot be deleted")
-		return
-	}
 
 	s.refreshNATSCapabilitiesIfStale(2 * time.Second)
 
@@ -1285,21 +1120,6 @@ func (s *Server) deleteAccount(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Server) isJetStreamManagedAccount(operator, accountPublicKey string) bool {
-	jsAccountName := strings.TrimSpace(config.JSAccountName)
-	if jsAccountName == "" {
-		return false
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, acc := range s.accounts {
-		if acc.Operator == operator && acc.PublicKey == accountPublicKey {
-			return strings.EqualFold(acc.Name, jsAccountName)
-		}
-	}
-	return false
 }
 
 func (s *Server) addPublishAllow(w http.ResponseWriter, r *http.Request) {

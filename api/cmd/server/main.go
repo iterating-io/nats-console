@@ -79,9 +79,6 @@ func main() {
 				server.SetNATSConn(nc)
 				server.RefreshNATSCapabilities()
 				server.LoadFromNATS()
-				if err := server.EnsureJetStreamAccountAndConnect(); err != nil {
-					log.Printf("EnsureJetStreamAccountAndConnect: %v", err)
-				}
 			}),
 			nats.DisconnectErrHandler(func(_ *nats.Conn, err error) {
 				if err != nil {
@@ -92,9 +89,6 @@ func main() {
 				log.Printf("NATS reconnected: %s", nc.ConnectedUrl())
 				server.RefreshNATSCapabilities()
 				server.LoadFromNATS()
-				if err := server.EnsureJetStreamAccountAndConnect(); err != nil {
-					log.Printf("EnsureJetStreamAccountAndConnect: %v", err)
-				}
 			}),
 			nats.ErrorHandler(func(_ *nats.Conn, _ *nats.Subscription, err error) {
 				log.Printf("NATS error: %v", err)

@@ -14,7 +14,6 @@ Boot sequence:
 2. Build and start the NATS container
 3. Wait for NATS to be healthy (`/healthz`)
 4. Build and start the `app` container (Nginx + API binary in one image)
-5. The API ensures the account named `CONSOLE_JS` exists and connects its default JetStream session through that account
 
 ## Prerequisites
 

@@ -18,7 +18,6 @@ NATS server must be configured with:
 - `allow_delete: true` in resolver config (for UI account deletion support)
 - Pre-provisioned system account NKey seed (`NATS_SYS_NKEY`)
 - Pre-provisioned operator NKey seed (`OPERATOR_NKEY`)
-- JetStream account `CONSOLE_JS` created and enabled under operator
 
 ## Features
 
@@ -150,7 +149,6 @@ docker-compose up
 ## Notes
 
 - Requires NATS Operator mode with FULL resolver and pre-provisioned `NATS_SYS_NKEY` and `OPERATOR_NKEY`
-- CONSOLE_JS account must be created and JetStream-enabled in NATS before console startup
 - Database (`/app/data/console.db` inside container) persists user records; mount volume to preserve across restarts
 - Port 9222 is the only exposed port; API (9322) runs internally behind Nginx
 
