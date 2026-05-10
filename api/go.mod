@@ -1,4 +1,4 @@
-module github.com/taek/nats-console/api
+module github.com/iterating-io/nats-console/api
 
 go 1.25.0
 

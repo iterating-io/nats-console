@@ -10,10 +10,10 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
 
-	"github.com/taek/nats-console/api/internal/auth"
-	"github.com/taek/nats-console/api/internal/config"
-	"github.com/taek/nats-console/api/internal/httpapi"
-	"github.com/taek/nats-console/api/internal/store"
+	"github.com/iterating-io/nats-console/api/internal/auth"
+	"github.com/iterating-io/nats-console/api/internal/config"
+	"github.com/iterating-io/nats-console/api/internal/httpapi"
+	"github.com/iterating-io/nats-console/api/internal/store"
 )
 
 // extractOperatorPublicKey derives the public key from an operator NKey seed.
