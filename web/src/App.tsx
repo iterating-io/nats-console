@@ -6,9 +6,15 @@ import AccountsPage from "./pages/AccountsPage";
 import StreamsPage from "./pages/StreamsPage";
 
 function App() {
+    const baseUrl = import.meta.env.BASE_URL ?? "/";
+    const routerBase =
+        baseUrl !== "/" && baseUrl.endsWith("/")
+            ? baseUrl.slice(0, -1)
+            : baseUrl;
+
     return (
         <AuthProvider>
-            <BrowserRouter basename={import.meta.env.BASE_URL}>
+            <BrowserRouter basename={routerBase}>
                 <Routes>
                     <Route path="/" element={<LoginPage />} />
                     <Route path="/dashboard" element={<DashboardLayout />}>
