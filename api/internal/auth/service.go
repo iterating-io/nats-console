@@ -22,11 +22,7 @@ type Service struct {
 }
 
 func NewService(secret string) *Service {
-	return &Service{
-		secret: []byte(secret),
-		issuer: "nats-console-api",
-		ttl:    12 * time.Hour,
-	}
+	return &Service{secret: []byte(secret), issuer: "nats-console-api", ttl: 12 * time.Hour}
 }
 
 func (s *Service) Issue(username, role string) (string, error) {

@@ -59,7 +59,7 @@ case "${1:-help}" in
         # (e.g. auth.conf was restored from backup while keys/ was not).
         if [[ "$needs_bootstrap" == "false" ]]; then
             SYS_ACCOUNT_IN_CONF="$(grep 'system_account:' "$AUTH_CONF" | sed 's/.*"\(.*\)".*/\1/')"
-            SYS_ACCOUNT_FROM_KEY="$(cd "$SCRIPT_DIR/api" && go run ../tools/bootstrap/main.go --print-pubkey "$KEYS_DIR/sys-account.nk" 2>/dev/null || true)"
+            SYS_ACCOUNT_FROM_KEY="$(cd "$SCRIPT_DIR/tools/bootstrap" && go run . --print-pubkey "$KEYS_DIR/sys-account.nk" 2>/dev/null || true)"
             if [[ -n "$SYS_ACCOUNT_FROM_KEY" && "$SYS_ACCOUNT_IN_CONF" != "$SYS_ACCOUNT_FROM_KEY" ]]; then
                 echo ">> Auth identity mismatch detected (auth.conf <-> keys/). Forcing re-bootstrap..."
                 needs_bootstrap=true
@@ -81,7 +81,7 @@ case "${1:-help}" in
             docker volume rm deploy_console-data 2>/dev/null || true
             docker volume rm deploy_nats-resolver 2>/dev/null || true
 
-            (cd "$SCRIPT_DIR/api" && go run ../tools/bootstrap/main.go --out-dir ../deploy)
+            (cd "$SCRIPT_DIR/tools/bootstrap" && go run . --out-dir "$SCRIPT_DIR/deploy")
 
             echo ">> Operator bootstrapped."
         fi
@@ -117,8 +117,8 @@ case "${1:-help}" in
 
         echo ""
         echo ">> Services:"
-        echo "   App : http://localhost"
-        echo "   API : http://localhost/api/health"
+        echo "   App : http://localhost:9222"
+        echo "   API : http://localhost:9222/api/health"
         echo "   NATS: nats://localhost:4222  monitoring: http://localhost:8222"
         ;;
     down)

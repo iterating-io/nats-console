@@ -1,0 +1,38 @@
+package httpapi
+
+import "net/http"
+
+func (s *Server) Routes() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/health", s.health)
+	mux.HandleFunc("POST /api/auth/login", s.authHandler.Login)
+	mux.HandleFunc("GET /api/v1/streams", s.authHandler.WithAuth(s.jetstreamHandler.ListStreams))
+	mux.HandleFunc("POST /api/v1/streams", s.authHandler.WithAuth(s.jetstreamHandler.CreateStream))
+	mux.HandleFunc("GET /api/v1/streams/{name}", s.authHandler.WithAuth(s.jetstreamHandler.GetStream))
+	mux.HandleFunc("PATCH /api/v1/streams/{name}", s.authHandler.WithAuth(s.jetstreamHandler.UpdateStream))
+	mux.HandleFunc("DELETE /api/v1/streams/{name}", s.authHandler.WithAuth(s.jetstreamHandler.DeleteStream))
+	mux.HandleFunc("GET /api/v1/streams/{name}/consumers", s.authHandler.WithAuth(s.jetstreamHandler.ListConsumers))
+	mux.HandleFunc("POST /api/v1/streams/{name}/consumers", s.authHandler.WithAuth(s.jetstreamHandler.CreateConsumer))
+	mux.HandleFunc("DELETE /api/v1/streams/{name}/consumers/{consumer}", s.authHandler.WithAuth(s.jetstreamHandler.DeleteConsumer))
+	mux.HandleFunc("POST /api/v1/publish", s.authHandler.WithAuth(s.authHandler.Publish))
+	mux.HandleFunc("GET /api/ws", s.authHandler.WebSocket)
+	mux.HandleFunc("GET /api/v1/operators", s.authHandler.WithAuth(s.accountsHandler.ListOperators))
+	mux.HandleFunc("GET /api/v1/accounts", s.authHandler.WithAuth(s.accountsHandler.ListAccounts))
+	mux.HandleFunc("POST /api/v1/accounts", s.authHandler.WithAuth(s.accountsHandler.CreateAccount))
+	mux.HandleFunc("DELETE /api/v1/accounts/{operator}/{accountPublicKey}", s.authHandler.WithAuth(s.accountsHandler.DeleteAccount))
+	mux.HandleFunc("GET /api/v1/accounts/{operator}/{accountPublicKey}/jwt", s.authHandler.WithAuth(s.accountsHandler.GetAccountJWT))
+	mux.HandleFunc("POST /api/v1/accounts/{operator}/{accountPublicKey}/jetstream", s.authHandler.WithAuth(s.accountsHandler.ToggleAccountJetStream))
+	mux.HandleFunc("POST /api/v1/accounts/{operator}/{name}/publish-allow", s.authHandler.WithAuth(s.accountsHandler.AddPublishAllow))
+	mux.HandleFunc("DELETE /api/v1/accounts/{operator}/{name}/publish-allow", s.authHandler.WithAuth(s.accountsHandler.RemovePublishAllow))
+	mux.HandleFunc("POST /api/v1/accounts/{operator}/{name}/subscribe-allow", s.authHandler.WithAuth(s.accountsHandler.AddSubscribeAllow))
+	mux.HandleFunc("DELETE /api/v1/accounts/{operator}/{name}/subscribe-allow", s.authHandler.WithAuth(s.accountsHandler.RemoveSubscribeAllow))
+	mux.HandleFunc("GET /api/v1/accounts/{operator}/{accountPublicKey}/users", s.authHandler.WithAuth(s.usersHandler.ListUsers))
+	mux.HandleFunc("POST /api/v1/accounts/{operator}/{accountPublicKey}/users", s.authHandler.WithAuth(s.usersHandler.CreateUser))
+	mux.HandleFunc("DELETE /api/v1/accounts/{operator}/{accountPublicKey}/users/{user}", s.authHandler.WithAuth(s.usersHandler.DeleteUser))
+	mux.HandleFunc("GET /api/v1/accounts/{operator}/{accountPublicKey}/users/{user}/creds", s.authHandler.WithAuth(s.usersHandler.GetUserCreds))
+	mux.HandleFunc("POST /api/v1/accounts/{operator}/{accountPublicKey}/users/{user}/publish-allow", s.authHandler.WithAuth(s.usersHandler.AddUserPublishAllow))
+	mux.HandleFunc("DELETE /api/v1/accounts/{operator}/{accountPublicKey}/users/{user}/publish-allow", s.authHandler.WithAuth(s.usersHandler.RemoveUserPublishAllow))
+	mux.HandleFunc("GET /api/v1/users", s.authHandler.WithAuth(s.usersHandler.ListAllUsers))
+	mux.HandleFunc("POST /api/v1/publish/as-user", s.authHandler.WithAuth(s.usersHandler.PublishAsUser))
+	return s.withCORS(mux)
+}
