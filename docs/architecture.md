@@ -32,6 +32,7 @@ The API connects to NATS using a dynamically generated user credential:
 | Method | Path                                          | Description                   |
 | ------ | --------------------------------------------- | ----------------------------- |
 | GET    | `/api/v1/streams`                             | List stream names             |
+| GET    | `/api/v1/streams/{name}`                      | Get stream details (returns `name`, `subjects`, `config`, `state`, `cluster`, `created`) |
 | POST   | `/api/v1/streams`                             | Create a new stream           |
 | DELETE | `/api/v1/streams/{name}`                      | Delete a stream               |
 | GET    | `/api/v1/streams/{name}/consumers`            | List consumers for a stream   |

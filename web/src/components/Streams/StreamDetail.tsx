@@ -7,6 +7,10 @@ type Consumer = { name: string; filterSubject: string };
 type StreamDetailType = {
     name: string;
     subjects: string[];
+    config?: any;
+    state?: any;
+    cluster?: any;
+    created?: string;
 };
 
 type Props = {
@@ -32,6 +36,8 @@ export default function StreamDetail({
     const [loading, setLoading] = useState(false);
     const [newSubject, setNewSubject] = useState("");
     const [subjectLoading, setSubjectLoading] = useState(false);
+    const [showConfig, setShowConfig] = useState(false);
+    const [showState, setShowState] = useState(false);
 
     const withAccountScope = (path: string) => {
         if (!accountPublicKey) {
@@ -285,6 +291,52 @@ export default function StreamDetail({
                         </button>
                     </div>
                 </div>
+
+                {(stream.config || stream.state) && (
+                    <div style={{ marginTop: "0.5rem" }}>
+                        {stream.config && (
+                            <div>
+                                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                    <strong>Stream Config</strong>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowConfig((s) => !s)}
+                                        aria-expanded={showConfig}
+                                        style={{ fontSize: "0.85rem" }}
+                                    >
+                                        {showConfig ? "Hide" : "Show"}
+                                    </button>
+                                </div>
+                                {showConfig && (
+                                    <pre style={{ whiteSpace: "pre-wrap", marginTop: "0.25rem" }}>
+                                        {JSON.stringify(stream.config, null, 2)}
+                                    </pre>
+                                )}
+                            </div>
+                        )}
+
+                        {stream.state && (
+                            <div style={{ marginTop: "0.5rem" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                                    <strong>Stream State</strong>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowState((s) => !s)}
+                                        aria-expanded={showState}
+                                        style={{ fontSize: "0.85rem" }}
+                                    >
+                                        {showState ? "Hide" : "Show"}
+                                    </button>
+                                </div>
+                                {showState && (
+                                    <pre style={{ whiteSpace: "pre-wrap", marginTop: "0.25rem" }}>
+                                        {JSON.stringify(stream.state, null, 2)}
+                                    </pre>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {error && <p className="error">{error}</p>}
 

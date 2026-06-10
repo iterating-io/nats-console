@@ -67,7 +67,16 @@ func (h *Handler) GetStream(w http.ResponseWriter, r *http.Request) {
 	if subjects == nil {
 		subjects = []string{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"name": info.Config.Name, "subjects": subjects})
+	// Return stream config and state so the UI can show the same details
+	// as the `nats stream info` CLI command (config + state + cluster).
+	writeJSON(w, http.StatusOK, map[string]any{
+		"name":     info.Config.Name,
+		"subjects": subjects,
+		"config":   info.Config,
+		"state":    info.State,
+		"cluster":  info.Cluster,
+		"created":  info.Created,
+	})
 }
 
 func (h *Handler) CreateStream(w http.ResponseWriter, r *http.Request) {
