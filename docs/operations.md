@@ -62,6 +62,14 @@ If legacy `deploy/keys/js-account.nk` or `deploy/keys/js-account.jwt` files are 
 
 Database path is fixed at `/app/data/console.db` inside container.
 
+## Account Provisioning Notes
+
+- Creating an account via `POST /api/v1/accounts` also creates a default per-account user named `stream-reader`.
+- This user is stored in SQLite (`console.db`) with fixed permissions for stream info/message-read access:
+    - publish allow: `$JS.API.STREAM.INFO.*`, `$JS.API.STREAM.MSG.GET.*`
+    - publish deny: `$JS.API.CONSUMER.>`, `$JS.API.STREAM.CREATE.>`, `$JS.API.STREAM.UPDATE.>`, `$JS.API.STREAM.DELETE.>`, `$JS.API.STREAM.PURGE.>`, `$JS.API.STREAM.MSG.DELETE.>`
+    - subscribe allow: `_INBOX.>`
+
 ### Web (`web/`)
 
 | Variable        | Default | Description                                                                 |
@@ -148,5 +156,23 @@ docker compose -f deploy/docker-compose.yml rm -f nats
 docker compose -f deploy/docker-compose.yml up -d nats
 ./run.sh up
 ```
+
+### Message API: `context deadline exceeded` (2026-06-10)
+
+A transient `context deadline exceeded` error observed when calling the
+`GET /api/v1/streams/{stream}/messages/last` endpoint was traced to NATS
+JetStream permission rejections. Root cause: the API previously cached a
+single `*nats.Conn` per account without separating the authentication identity
+(ephemeral account-signed user vs stored per-account users such as
+`stream-reader`). This led to JetStream API requests being issued with an
+identity that lacked the necessary publish permission to `$JS.API.STREAM.MSG.GET.*`,
+producing permission violations and timeouts.
+
+Fix (2026-06-10): the connection cache was split per account into an `ephemeral`
+connection and a `users` map so that requests requiring a stored user's
+permissions authenticate with that user's identity. Key files changed:
+`api/internal/jetstream/handler.go`, `api/internal/jetstream/handler_internal.go`.
+Transient session notes were recorded at `.github/sessions/session-20260610-103500.md`
+and have been removed after consolidation into this document.
 
 This recreates only the NATS container and clears the container-local JetStream store used by this setup, while keeping generated auth files and named volumes intact.

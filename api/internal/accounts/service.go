@@ -120,7 +120,7 @@ func (s *Service) LookupAccountJWT(accountPublicKey string) (string, error) {
 	if nc == nil || !nc.IsConnected() {
 		return "", fmt.Errorf("NATS not connected")
 	}
-	lookupMsg, err := nc.Request("$SYS.REQ.ACCOUNT."+accountPublicKey+".CLAIMS.LOOKUP", nil, 2*time.Second)
+	lookupMsg, err := nc.Request("$SYS.REQ.ACCOUNT."+accountPublicKey+".CLAIMS.LOOKUP", nil, 5*time.Second)
 	if err != nil {
 		return "", fmt.Errorf("lookup account claims: %w", err)
 	}
@@ -162,7 +162,7 @@ func (s *Service) PushAccountClaimsToNATS(claims *natsjwt.AccountClaims, opKP nk
 	if err != nil {
 		return nil, fmt.Errorf("encode account JWT: %w", err)
 	}
-	msg, err := nc.Request("$SYS.REQ.CLAIMS.UPDATE", []byte(jwt), 5*time.Second)
+	msg, err := nc.Request("$SYS.REQ.CLAIMS.UPDATE", []byte(jwt), 10*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("push account JWT: %w", err)
 	}
@@ -293,10 +293,112 @@ func (s *Service) EnsureAccountSigningKey(operator, accountPublicKey string) (*s
 	if err := s.store.SaveAccountSigningKey(operator, acc.Name, accountPublicKey, string(sigSeed)); err != nil {
 		return nil, fmt.Errorf("persist signing key: %w", err)
 	}
-	if err := s.PushAccountToNATS(acc); err != nil {
-		log.Printf("ensureAccountSigningKey: push account JWT for %s/%s: %v", operator, accountPublicKey, err)
+	// If an operator key is configured, ensure the resolver receives the updated account JWT.
+	if s.cfg.OperatorNKey != "" {
+		var pushErr error
+		for i := 0; i < 3; i++ {
+			pushErr = s.PushAccountToNATS(acc)
+			if pushErr == nil {
+				break
+			}
+			log.Printf("ensureAccountSigningKey: push account JWT attempt %d for %s/%s failed: %v", i+1, operator, accountPublicKey, pushErr)
+			time.Sleep(time.Duration(500*(i+1)) * time.Millisecond)
+		}
+		if pushErr != nil {
+			return nil, fmt.Errorf("push account JWT: %w", pushErr)
+		}
 	}
 	return &store.AccountSigningKey{Operator: operator, Account: acc.Name, AccountPublicKey: accountPublicKey, Seed: string(sigSeed)}, nil
+}
+
+// BuildUserJWTForUser builds a user JWT signed by the account signing key and
+// returns the JWT string along with the user's nkey seed bytes. This is used
+// by server-side connections that need to authenticate as a specific stored
+// user (for example the "stream-reader" user) with that user's permission
+// set.
+func (s *Service) BuildUserJWTForUser(operator, accountPublicKey, userName string) (string, []byte, error) {
+	seedStr, err := s.store.GetUserSeed(operator, accountPublicKey, userName)
+	if err != nil {
+		return "", nil, err
+	}
+	user, err := s.store.GetUser(operator, accountPublicKey, userName)
+	if err != nil {
+		return "", nil, err
+	}
+	signingKey, err := s.EnsureAccountSigningKey(operator, accountPublicKey)
+	if err != nil {
+		return "", nil, err
+	}
+	accountKP, err := nkeys.FromSeed([]byte(signingKey.Seed))
+	if err != nil {
+		return "", nil, fmt.Errorf("invalid account signing seed: %w", err)
+	}
+	claims := natsjwt.NewUserClaims(user.PublicKey)
+	claims.Name = user.Name
+	claims.Permissions.Pub.Allow = append([]string{}, user.PublishAllow...)
+	claims.Permissions.Pub.Deny = append([]string{}, user.PublishDeny...)
+	claims.Permissions.Sub.Allow = append([]string{}, user.SubscribeAllow...)
+	signerPub, err := accountKP.PublicKey()
+	if err != nil {
+		return "", nil, err
+	}
+	if signerPub != accountPublicKey {
+		claims.IssuerAccount = accountPublicKey
+	}
+	claims.IssuedAt = time.Now().Unix()
+	jwtStr, err := claims.Encode(accountKP)
+	if err != nil {
+		return "", nil, fmt.Errorf("encode user jwt: %w", err)
+	}
+	return jwtStr, []byte(seedStr), nil
+}
+
+func (s *Service) EnsureStreamReaderUser(operator, accountPublicKey string) error {
+	if _, err := s.store.GetUser(operator, accountPublicKey, streamReaderUserName); err == nil {
+		return nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return err
+	}
+	acc, ok := s.repo.FindByPublicKey(operator, accountPublicKey)
+	if !ok {
+		return fmt.Errorf("account not found")
+	}
+	kp, err := nkeys.CreateUser()
+	if err != nil {
+		return fmt.Errorf("create user keypair: %w", err)
+	}
+	pubKey, err := kp.PublicKey()
+	if err != nil {
+		return fmt.Errorf("user public key: %w", err)
+	}
+	seed, err := kp.Seed()
+	if err != nil {
+		return fmt.Errorf("export user seed: %w", err)
+	}
+	if _, err := s.store.CreateUser(operator, acc.Name, accountPublicKey, streamReaderUserName, pubKey, string(seed)); err != nil {
+		if !errors.Is(err, store.ErrConflict) {
+			return fmt.Errorf("persist user: %w", err)
+		}
+	}
+	for _, subject := range streamReaderPublishAllow {
+		if _, err := s.store.AddUserPublishAllow(operator, accountPublicKey, streamReaderUserName, subject); err != nil && !errors.Is(err, store.ErrConflict) {
+			return fmt.Errorf("persist publish allow %q: %w", subject, err)
+		}
+	}
+	for _, subject := range streamReaderPublishDeny {
+		if _, err := s.store.AddUserPublishDeny(operator, accountPublicKey, streamReaderUserName, subject); err != nil && !errors.Is(err, store.ErrConflict) {
+			return fmt.Errorf("persist publish deny %q: %w", subject, err)
+		}
+	}
+	for _, subject := range streamReaderSubscribeAllow {
+		if _, err := s.store.AddUserSubscribeAllow(operator, accountPublicKey, streamReaderUserName, subject); err != nil && !errors.Is(err, store.ErrConflict) {
+			return fmt.Errorf("persist subscribe allow %q: %w", subject, err)
+		}
+	}
+	if _, err := s.EnsureAccountSigningKey(operator, accountPublicKey); err != nil {
+		return fmt.Errorf("ensure account signing key: %w", err)
+	}
+	return nil
 }
 
 func (s *Service) SystemAccountPublicKey() string {

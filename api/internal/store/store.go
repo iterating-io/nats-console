@@ -23,6 +23,8 @@ type User struct {
 	Operator         string   `json:"operator"`
 	PublicKey        string   `json:"publicKey"`
 	PublishAllow     []string `json:"publishAllow"`
+	PublishDeny      []string `json:"publishDeny"`
+	SubscribeAllow   []string `json:"subscribeAllow"`
 }
 
 type AccountSigningKey struct {
@@ -71,6 +73,20 @@ func (s *Store) migrate() error {
 			PRIMARY KEY (operator, account_public_key, name)
 		)`,
 		`CREATE TABLE IF NOT EXISTS user_publish_allow (
+			operator  TEXT NOT NULL,
+			account_public_key TEXT NOT NULL,
+			user_name TEXT NOT NULL,
+			subject   TEXT NOT NULL,
+			PRIMARY KEY (operator, account_public_key, user_name, subject)
+		)`,
+		`CREATE TABLE IF NOT EXISTS user_publish_deny (
+			operator  TEXT NOT NULL,
+			account_public_key TEXT NOT NULL,
+			user_name TEXT NOT NULL,
+			subject   TEXT NOT NULL,
+			PRIMARY KEY (operator, account_public_key, user_name, subject)
+		)`,
+		`CREATE TABLE IF NOT EXISTS user_subscribe_allow (
 			operator  TEXT NOT NULL,
 			account_public_key TEXT NOT NULL,
 			user_name TEXT NOT NULL,
@@ -129,6 +145,16 @@ func (s *Store) ListUsers(operator, accountPublicKey string) ([]User, error) {
 			return nil, err
 		}
 		users[i].PublishAllow = subjects
+		denySubjects, err := s.listUserPublishDeny(users[i].Operator, users[i].AccountPublicKey, users[i].Name)
+		if err != nil {
+			return nil, err
+		}
+		users[i].PublishDeny = denySubjects
+		subscribeSubjects, err := s.listUserSubscribeAllow(users[i].Operator, users[i].AccountPublicKey, users[i].Name)
+		if err != nil {
+			return nil, err
+		}
+		users[i].SubscribeAllow = subscribeSubjects
 	}
 	return users, nil
 }
@@ -158,6 +184,16 @@ func (s *Store) ListAllUsers() ([]User, error) {
 			return nil, err
 		}
 		users[i].PublishAllow = subjects
+		denySubjects, err := s.listUserPublishDeny(users[i].Operator, users[i].AccountPublicKey, users[i].Name)
+		if err != nil {
+			return nil, err
+		}
+		users[i].PublishDeny = denySubjects
+		subscribeSubjects, err := s.listUserSubscribeAllow(users[i].Operator, users[i].AccountPublicKey, users[i].Name)
+		if err != nil {
+			return nil, err
+		}
+		users[i].SubscribeAllow = subscribeSubjects
 	}
 	return users, nil
 }
@@ -179,6 +215,16 @@ func (s *Store) GetUser(operator, accountPublicKey, name string) (*User, error) 
 		return nil, err
 	}
 	u.PublishAllow = subjects
+	denySubjects, err := s.listUserPublishDeny(operator, accountPublicKey, name)
+	if err != nil {
+		return nil, err
+	}
+	u.PublishDeny = denySubjects
+	subscribeSubjects, err := s.listUserSubscribeAllow(operator, accountPublicKey, name)
+	if err != nil {
+		return nil, err
+	}
+	u.SubscribeAllow = subscribeSubjects
 	return &u, nil
 }
 
@@ -193,7 +239,16 @@ func (s *Store) CreateUser(operator, account, accountPublicKey, name, publicKey,
 	if err != nil {
 		return nil, err
 	}
-	return &User{Operator: operator, Account: account, AccountPublicKey: accountPublicKey, Name: name, PublicKey: publicKey, PublishAllow: []string{}}, nil
+	return &User{
+		Operator:         operator,
+		Account:          account,
+		AccountPublicKey: accountPublicKey,
+		Name:             name,
+		PublicKey:        publicKey,
+		PublishAllow:     []string{},
+		PublishDeny:      []string{},
+		SubscribeAllow:   []string{},
+	}, nil
 }
 
 func (s *Store) SaveAccountSigningKey(operator, account, accountPublicKey, seed string) error {
@@ -240,6 +295,18 @@ func (s *Store) DeleteAccountData(operator, accountPublicKey string) error {
 		return err
 	}
 	if _, err := tx.Exec(
+		"DELETE FROM user_publish_deny WHERE operator = ? AND account_public_key = ?",
+		operator, accountPublicKey,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(
+		"DELETE FROM user_subscribe_allow WHERE operator = ? AND account_public_key = ?",
+		operator, accountPublicKey,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(
 		"DELETE FROM users WHERE operator = ? AND account_public_key = ?",
 		operator, accountPublicKey,
 	); err != nil {
@@ -277,6 +344,18 @@ func (s *Store) DeleteUser(operator, accountPublicKey, name string) error {
 	defer tx.Rollback() //nolint:errcheck
 	if _, err := tx.Exec(
 		"DELETE FROM user_publish_allow WHERE operator = ? AND account_public_key = ? AND user_name = ?",
+		operator, accountPublicKey, name,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(
+		"DELETE FROM user_publish_deny WHERE operator = ? AND account_public_key = ? AND user_name = ?",
+		operator, accountPublicKey, name,
+	); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(
+		"DELETE FROM user_subscribe_allow WHERE operator = ? AND account_public_key = ? AND user_name = ?",
 		operator, accountPublicKey, name,
 	); err != nil {
 		return err
@@ -325,9 +404,83 @@ func (s *Store) RemoveUserPublishAllow(operator, accountPublicKey, user, subject
 	return s.GetUser(operator, accountPublicKey, user)
 }
 
+func (s *Store) AddUserPublishDeny(operator, accountPublicKey, user, subject string) (*User, error) {
+	if _, err := s.GetUser(operator, accountPublicKey, user); err != nil {
+		return nil, err
+	}
+	_, err := s.db.Exec(
+		"INSERT INTO user_publish_deny (operator, account_public_key, user_name, subject) VALUES (?, ?, ?, ?)",
+		operator, accountPublicKey, user, subject,
+	)
+	if isUniqueErr(err) {
+		return nil, ErrConflict
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.GetUser(operator, accountPublicKey, user)
+}
+
+func (s *Store) AddUserSubscribeAllow(operator, accountPublicKey, user, subject string) (*User, error) {
+	if _, err := s.GetUser(operator, accountPublicKey, user); err != nil {
+		return nil, err
+	}
+	_, err := s.db.Exec(
+		"INSERT INTO user_subscribe_allow (operator, account_public_key, user_name, subject) VALUES (?, ?, ?, ?)",
+		operator, accountPublicKey, user, subject,
+	)
+	if isUniqueErr(err) {
+		return nil, ErrConflict
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.GetUser(operator, accountPublicKey, user)
+}
+
 func (s *Store) listUserPublishAllow(operator, accountPublicKey, user string) ([]string, error) {
 	rows, err := s.db.Query(
 		"SELECT subject FROM user_publish_allow WHERE operator = ? AND account_public_key = ? AND user_name = ? ORDER BY subject",
+		operator, accountPublicKey, user,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	subjects := []string{}
+	for rows.Next() {
+		var sub string
+		if err := rows.Scan(&sub); err != nil {
+			return nil, err
+		}
+		subjects = append(subjects, sub)
+	}
+	return subjects, rows.Err()
+}
+
+func (s *Store) listUserPublishDeny(operator, accountPublicKey, user string) ([]string, error) {
+	rows, err := s.db.Query(
+		"SELECT subject FROM user_publish_deny WHERE operator = ? AND account_public_key = ? AND user_name = ? ORDER BY subject",
+		operator, accountPublicKey, user,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	subjects := []string{}
+	for rows.Next() {
+		var sub string
+		if err := rows.Scan(&sub); err != nil {
+			return nil, err
+		}
+		subjects = append(subjects, sub)
+	}
+	return subjects, rows.Err()
+}
+
+func (s *Store) listUserSubscribeAllow(operator, accountPublicKey, user string) ([]string, error) {
+	rows, err := s.db.Query(
+		"SELECT subject FROM user_subscribe_allow WHERE operator = ? AND account_public_key = ? AND user_name = ? ORDER BY subject",
 		operator, accountPublicKey, user,
 	)
 	if err != nil {
@@ -375,6 +528,8 @@ func (s *Store) hasColumn(table, column string) bool {
 func (s *Store) resetUserSchema() error {
 	stmts := []string{
 		`DROP TABLE IF EXISTS user_publish_allow`,
+		`DROP TABLE IF EXISTS user_publish_deny`,
+		`DROP TABLE IF EXISTS user_subscribe_allow`,
 		`DROP TABLE IF EXISTS users`,
 		`CREATE TABLE users (
 			operator   TEXT NOT NULL,
@@ -386,6 +541,20 @@ func (s *Store) resetUserSchema() error {
 			PRIMARY KEY (operator, account_public_key, name)
 		)`,
 		`CREATE TABLE user_publish_allow (
+			operator  TEXT NOT NULL,
+			account_public_key TEXT NOT NULL,
+			user_name TEXT NOT NULL,
+			subject   TEXT NOT NULL,
+			PRIMARY KEY (operator, account_public_key, user_name, subject)
+		)`,
+		`CREATE TABLE user_publish_deny (
+			operator  TEXT NOT NULL,
+			account_public_key TEXT NOT NULL,
+			user_name TEXT NOT NULL,
+			subject   TEXT NOT NULL,
+			PRIMARY KEY (operator, account_public_key, user_name, subject)
+		)`,
+		`CREATE TABLE user_subscribe_allow (
 			operator  TEXT NOT NULL,
 			account_public_key TEXT NOT NULL,
 			user_name TEXT NOT NULL,

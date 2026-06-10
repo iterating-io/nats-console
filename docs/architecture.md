@@ -57,13 +57,17 @@ The API connects to NATS using a dynamically generated user credential:
 
 - **Operator** — top-level namespace (`name`); loaded from NATS resolver at startup and kept in-memory; immutable (read-only in API)
 - **Account** — belongs to an operator; kept in-memory, populated from NATS; has `publishAllow []string` and `subscribeAllow []string` subject rules; immutable (read-only in API)
-- **User** — belongs to an account identified by its NATS account public key; persisted to SQLite (`console.db`); NATS keypair auto-generated on creation (`publicKey` stored); has `publishAllow []string` subject rules
+- **User** — belongs to an account identified by its NATS account public key; persisted to SQLite (`console.db`); NATS keypair auto-generated on creation (`publicKey` stored); has `publishAllow []string`, `publishDeny []string`, and `subscribeAllow []string` subject rules
 
 ### Storage
 
 - **Operators**: In-memory at startup, derived from accounts loaded from NATS resolver via `LoadFromNATS()`. Read-only.
 - **Accounts**: Not stored in the database. On creation or permission update, the API signs a new account JWT with the operator NKey and immediately pushes it to the NATS full resolver via `$SYS.REQ.CLAIMS.UPDATE`. On startup, `LoadFromNATS()` restores accounts from the resolver into memory. Resolver persistence is backed by the Docker named volume `nats-resolver`.
 - **Users**: Persisted to SQLite database (`console.db`) and keyed by `(operator, account_public_key, user name)`. Survives across server restarts and is backed by Docker volume `console-data`.
+- **Account creation side effect**: On `POST /api/v1/accounts`, API auto-provisions a per-account user `stream-reader` and persists these rules:
+    - publish allow: `$JS.API.STREAM.INFO.*`, `$JS.API.STREAM.MSG.GET.*`
+    - publish deny: `$JS.API.CONSUMER.>`, `$JS.API.STREAM.CREATE.>`, `$JS.API.STREAM.UPDATE.>`, `$JS.API.STREAM.DELETE.>`, `$JS.API.STREAM.PURGE.>`, `$JS.API.STREAM.MSG.DELETE.>`
+    - subscribe allow: `_INBOX.>`
 
 ### REST Endpoints
 
@@ -99,6 +103,7 @@ The API connects to NATS using a dynamically generated user credential:
 
 - On user creation, server auto-generates a NATS keypair via `nkeys.CreateUser()`.
 - The API persists user seeds and account signing seeds in SQLite for later `.creds` export.
+- Exported user creds encode persisted per-user publish allow/deny and subscribe allow permissions into the signed user JWT.
 - User creds can be exported on demand through the creds endpoint; legacy users created before seed persistence return an explicit error and must be recreated.
 
 ## Frontend Structure

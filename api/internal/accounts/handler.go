@@ -91,10 +91,19 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 		PublicKey:      pubKey,
 	}
 	h.repo.AddAccount(record)
+	if err := h.ensureStreamReaderUser(record); err != nil {
+		h.repo.RemoveAccount(record.Operator, record.PublicKey)
+		if cleanupErr := h.store.DeleteAccountData(req.Operator, pubKey); cleanupErr != nil {
+			log.Printf("createAccount: cleanup data for %s/%s: %v", req.Operator, req.Name, cleanupErr)
+		}
+		log.Printf("createAccount: provision stream reader for %s/%s: %v", req.Operator, req.Name, err)
+		writeError(w, http.StatusInternalServerError, "failed to provision stream reader user")
+		return
+	}
 	if err := h.service.PushAccountToNATS(record); err != nil {
 		h.repo.RemoveAccount(record.Operator, record.PublicKey)
-		if cleanupErr := h.store.DeleteAccountSigningKey(req.Operator, pubKey); cleanupErr != nil {
-			log.Printf("createAccount: cleanup signing key for %s/%s: %v", req.Operator, req.Name, cleanupErr)
+		if cleanupErr := h.store.DeleteAccountData(req.Operator, pubKey); cleanupErr != nil {
+			log.Printf("createAccount: cleanup data for %s/%s: %v", req.Operator, req.Name, cleanupErr)
 		}
 		log.Printf("createAccount: push JWT for %s/%s: %v", req.Operator, req.Name, err)
 		writeError(w, http.StatusBadGateway, "failed to update nats resolver")

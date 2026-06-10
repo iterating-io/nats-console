@@ -17,7 +17,10 @@ const NAV: NavGroup[] = [
     },
     {
         group: "JetStream",
-        items: [{ label: "Streams / Consumers", path: "/dashboard/streams" }],
+        items: [
+            { label: "Streams / Consumers", path: "/dashboard/streams" },
+            { label: "Messages", path: "/dashboard/messages" },
+        ],
     },
 ];
 

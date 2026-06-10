@@ -22,6 +22,7 @@ NATS server must be configured with:
 ## Features
 
 - Account and user lifecycle management with pub/sub and publish allow rules
+- Account creation auto-provisions a `stream-reader` user with stream-info/message-read only permissions
 - User credentials export and creds file download
 - JetStream stream and consumer CRUD
 - Dashboard publish test and live heartbeat

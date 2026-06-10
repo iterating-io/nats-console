@@ -4,6 +4,7 @@ import LoginPage from "./pages/LoginPage";
 import DashboardLayout from "./pages/DashboardLayout";
 import AccountsPage from "./pages/AccountsPage";
 import StreamsPage from "./pages/StreamsPage";
+import MessagesPage from "./pages/MessagesPage";
 
 function App() {
     const baseUrl = import.meta.env.BASE_URL ?? "/";
@@ -24,6 +25,7 @@ function App() {
                         />
                         <Route path="accounts" element={<AccountsPage />} />
                         <Route path="streams" element={<StreamsPage />} />
+                        <Route path="messages" element={<MessagesPage />} />
                     </Route>
                     <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>

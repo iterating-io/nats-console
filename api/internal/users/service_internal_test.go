@@ -32,7 +32,16 @@ func TestBuildUserCreds(t *testing.T) {
 	if err != nil {
 		t.Fatalf("export user public key: %v", err)
 	}
-	creds, err := buildUserCreds("test-user", userPub, string(userSeed), string(accountSeed), accountPub)
+	creds, err := buildUserCreds(
+		"test-user",
+		userPub,
+		string(userSeed),
+		string(accountSeed),
+		accountPub,
+		[]string{"$JS.API.STREAM.INFO.*"},
+		[]string{"$JS.API.CONSUMER.>"},
+		[]string{"_INBOX.>"},
+	)
 	if err != nil {
 		t.Fatalf("buildUserCreds failed: %v", err)
 	}

@@ -225,7 +225,16 @@ func (h *Handler) GetUserCreds(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "failed to prepare account signing key: "+err.Error())
 		return
 	}
-	creds, err := buildUserCreds(user.Name, user.PublicKey, userSeed, signingKey.Seed, accountPublicKey)
+	creds, err := buildUserCreds(
+		user.Name,
+		user.PublicKey,
+		userSeed,
+		signingKey.Seed,
+		accountPublicKey,
+		user.PublishAllow,
+		user.PublishDeny,
+		user.SubscribeAllow,
+	)
 	if err != nil {
 		log.Printf("getUserCreds: %s/%s/%s: %v", operator, accountPublicKey, userName, err)
 		writeError(w, http.StatusInternalServerError, "failed to generate creds")

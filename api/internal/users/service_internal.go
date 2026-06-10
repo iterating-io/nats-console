@@ -9,13 +9,25 @@ import (
 	"github.com/nats-io/nkeys"
 )
 
-func buildUserCreds(name, userPublicKey, userSeed, accountSigningSeed, accountPublicKey string) (string, error) {
+func buildUserCreds(
+	name,
+	userPublicKey,
+	userSeed,
+	accountSigningSeed,
+	accountPublicKey string,
+	pubAllow []string,
+	pubDeny []string,
+	subAllow []string,
+) (string, error) {
 	accountKP, err := nkeys.FromSeed([]byte(accountSigningSeed))
 	if err != nil {
 		return "", fmt.Errorf("account signing seed: %w", err)
 	}
 	claims := natsjwt.NewUserClaims(userPublicKey)
 	claims.Name = name
+	claims.Permissions.Pub.Allow = append([]string{}, pubAllow...)
+	claims.Permissions.Pub.Deny = append([]string{}, pubDeny...)
+	claims.Permissions.Sub.Allow = append([]string{}, subAllow...)
 	signerPub, err := accountKP.PublicKey()
 	if err != nil {
 		return "", fmt.Errorf("account signing public key: %w", err)

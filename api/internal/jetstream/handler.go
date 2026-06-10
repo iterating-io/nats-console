@@ -2,6 +2,7 @@ package jetstream
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -18,12 +19,17 @@ type Handler struct {
 	cfg          config.Config
 	repo         *accounts.Repository
 	accountsSvc  *accounts.Service
-	accountConns map[string]*nats.Conn
+	accountConns map[string]*connGroup
 	mu           sync.Mutex
 }
 
 func NewHandler(cfg config.Config, repo *accounts.Repository, accountsSvc *accounts.Service) *Handler {
-	return &Handler{cfg: cfg, repo: repo, accountsSvc: accountsSvc, accountConns: make(map[string]*nats.Conn)}
+	return &Handler{cfg: cfg, repo: repo, accountsSvc: accountsSvc, accountConns: make(map[string]*connGroup)}
+}
+
+type connGroup struct {
+	ephemeral *nats.Conn
+	users     map[string]*nats.Conn
 }
 
 func (h *Handler) ListStreams(w http.ResponseWriter, r *http.Request) {
@@ -229,4 +235,63 @@ func (h *Handler) DeleteConsumer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) GetLastMessage(w http.ResponseWriter, r *http.Request) {
+	stream := strings.TrimSpace(r.PathValue("name"))
+	if stream == "" {
+		writeError(w, http.StatusBadRequest, "stream name is required")
+		return
+	}
+	accountPublicKey := strings.TrimSpace(r.URL.Query().Get("accountPublicKey"))
+	if accountPublicKey == "" {
+		writeError(w, http.StatusBadRequest, "accountPublicKey query parameter is required")
+		return
+	}
+	acc, ok := h.repo.FindAnyByPublicKey(accountPublicKey)
+	if !ok {
+		writeError(w, http.StatusNotFound, "account not found")
+		return
+	}
+	if err := h.accountsSvc.EnsureStreamReaderUser(acc.Operator, accountPublicKey); err != nil {
+		writeError(w, http.StatusBadGateway, "failed to ensure stream reader user: "+err.Error())
+		return
+	}
+	// Connect specifically as the stored `stream-reader` user so the GET message
+	// API call uses that user's permissions. Do not replace the default
+	// connection used by other handlers which require broader permissions.
+	nc, err := h.getOrCreateAccountConnAsUser(acc.Operator, accountPublicKey, "stream-reader")
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to connect as stream-reader: "+err.Error())
+		return
+	}
+	js, err := nc.JetStream()
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "jetstream unavailable for account")
+		return
+	}
+	info, err := js.StreamInfo(stream)
+	if err != nil {
+		writeJetStreamError(w, err, "stream not found")
+		return
+	}
+	lastSeq := info.State.LastSeq
+	if lastSeq == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"stream": stream, "seq": 0, "message": nil})
+		return
+	}
+	msg, err := js.GetMsg(stream, lastSeq)
+	if err != nil {
+		writeJetStreamError(w, err, "failed to get message")
+		return
+	}
+	payload := base64.StdEncoding.EncodeToString(msg.Data)
+	resp := map[string]any{
+		"stream":   stream,
+		"seq":      lastSeq,
+		"subject":  msg.Subject,
+		"payload":  payload,
+		"encoding": "base64",
+	}
+	writeJSON(w, http.StatusOK, resp)
 }

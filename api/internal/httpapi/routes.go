@@ -14,6 +14,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/streams/{name}/consumers", s.authHandler.WithAuth(s.jetstreamHandler.ListConsumers))
 	mux.HandleFunc("POST /api/v1/streams/{name}/consumers", s.authHandler.WithAuth(s.jetstreamHandler.CreateConsumer))
 	mux.HandleFunc("DELETE /api/v1/streams/{name}/consumers/{consumer}", s.authHandler.WithAuth(s.jetstreamHandler.DeleteConsumer))
+	mux.HandleFunc("GET /api/v1/streams/{name}/messages/last", s.authHandler.WithAuth(s.jetstreamHandler.GetLastMessage))
 	mux.HandleFunc("POST /api/v1/publish", s.authHandler.WithAuth(s.authHandler.Publish))
 	mux.HandleFunc("GET /api/ws", s.authHandler.WebSocket)
 	mux.HandleFunc("GET /api/v1/operators", s.authHandler.WithAuth(s.accountsHandler.ListOperators))
