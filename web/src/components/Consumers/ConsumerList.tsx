@@ -31,7 +31,12 @@ export default function ConsumerList({ consumers, onDelete }: Props) {
                             type="button"
                             className="delete-btn"
                             onClick={() => {
-                                if (!window.confirm(`Delete consumer '${c.name}'?`)) return;
+                                if (
+                                    !window.confirm(
+                                        `Delete consumer '${c.name}'?`,
+                                    )
+                                )
+                                    return;
                                 onDelete(c.name);
                             }}
                         >

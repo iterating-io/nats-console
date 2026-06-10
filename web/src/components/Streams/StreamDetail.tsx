@@ -236,14 +236,19 @@ export default function StreamDetail({
                     )}
                     <ul className="list">
                         {sortedSubjects.map((s) => (
-                                <li key={s} className="list-row">
+                            <li key={s} className="list-row">
                                 <code>{s}</code>
                                 <button
                                     type="button"
                                     className="delete-btn"
                                     disabled={subjectLoading}
                                     onClick={() => {
-                                        if (!window.confirm(`Remove subject '${s}' from stream '${streamName}'?`)) return;
+                                        if (
+                                            !window.confirm(
+                                                `Remove subject '${s}' from stream '${streamName}'?`,
+                                            )
+                                        )
+                                            return;
                                         handleRemoveSubject(s);
                                     }}
                                 >

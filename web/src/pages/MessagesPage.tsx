@@ -241,8 +241,16 @@ export default function MessagesPage() {
             <div className="two-col">
                 <section className="panel">
                     <h3>Streams</h3>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                        <label style={{ fontSize: "0.9rem", fontWeight: 600 }}>Account</label>
+                    <div
+                        style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "0.5rem",
+                        }}
+                    >
+                        <label style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+                            Account
+                        </label>
                         <select
                             aria-label="Select account"
                             value={selectedAccountPublicKey}
@@ -270,8 +278,15 @@ export default function MessagesPage() {
                         </select>
 
                         <div style={{ marginTop: "0.25rem" }}>
-                            <label style={{ fontSize: "0.9rem", fontWeight: 600 }}>Streams</label>
-                            <ul className="list" style={{ marginTop: "0.5rem" }}>
+                            <label
+                                style={{ fontSize: "0.9rem", fontWeight: 600 }}
+                            >
+                                Streams
+                            </label>
+                            <ul
+                                className="list"
+                                style={{ marginTop: "0.5rem" }}
+                            >
                                 {streams.length === 0 && (
                                     <li className="muted">No streams found.</li>
                                 )}
@@ -283,13 +298,19 @@ export default function MessagesPage() {
                                         <button
                                             type="button"
                                             className="list-name-btn"
-                                            aria-pressed={selectedStream === s.name}
+                                            aria-pressed={
+                                                selectedStream === s.name
+                                            }
                                             aria-label={`Select stream ${s.name}`}
-                                            onClick={() => setSelectedStream(s.name)}
+                                            onClick={() =>
+                                                setSelectedStream(s.name)
+                                            }
                                         >
                                             {s.name}
                                             {selectedStream === s.name && (
-                                                <span className="selected-badge">Selected</span>
+                                                <span className="selected-badge">
+                                                    Selected
+                                                </span>
                                             )}
                                         </button>
                                     </li>
@@ -301,8 +322,15 @@ export default function MessagesPage() {
                 <section className="panel">
                     <h3>Latest Message</h3>
                     {selectedStream && (
-                        <div style={{ marginTop: "0.5rem", marginBottom: "0.5rem" }}>
-                            <span className="selected-badge">{selectedStream}</span>
+                        <div
+                            style={{
+                                marginTop: "0.5rem",
+                                marginBottom: "0.5rem",
+                            }}
+                        >
+                            <span className="selected-badge">
+                                {selectedStream}
+                            </span>
                         </div>
                     )}
                     {!selectedAccountPublicKey || !selectedStream ? (

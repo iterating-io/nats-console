@@ -42,7 +42,12 @@ export default function StreamList({
                             type="button"
                             className="delete-btn"
                             onClick={() => {
-                                if (!window.confirm(`Delete stream '${s.name}'?`)) return;
+                                if (
+                                    !window.confirm(
+                                        `Delete stream '${s.name}'?`,
+                                    )
+                                )
+                                    return;
                                 onDelete(s.name);
                             }}
                         >
