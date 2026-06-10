@@ -79,9 +79,11 @@ export default function MessagesPage() {
         const data = (await res.json()) as { streams: string[] };
         const nextStreams = data.streams.map((name) => ({ name }));
         setStreams(nextStreams);
+        // Do not auto-select the first stream. Require explicit stream selection
+        // so users pick an account first and then a stream.
         setSelectedStream((prev) => {
             if (prev && nextStreams.some((s) => s.name === prev)) return prev;
-            return nextStreams[0]?.name ?? "";
+            return "";
         });
     };
 
@@ -115,6 +117,19 @@ export default function MessagesPage() {
             lastSeqRef.current = 0;
             return;
         }
+        // If the selected stream does not exist for the current account,
+        // don't start polling until streams are refreshed.
+        if (!streams.some((s) => s.name === selectedStream)) {
+            setMessage(null);
+            lastSeqRef.current = 0;
+            return;
+        }
+        // Clear previous message and sequence when starting to poll a newly
+        // selected stream so the UI does not retain values from the prior
+        // stream while the new stream is being polled.
+        lastSeqRef.current = 0;
+        setMessage(null);
+        setError("");
         let stopped = false;
         let timerId: number | undefined;
         const url = `${apiBase}/api/v1/streams/${encodeURIComponent(selectedStream)}/messages/last?accountPublicKey=${encodeURIComponent(
@@ -143,10 +158,25 @@ export default function MessagesPage() {
                 navigate("/");
                 return;
             }
-            if (!res.ok) {
+            if (res.status === 404) {
+                // Selected stream does not exist for this account anymore.
+                // Stop polling, clear selection and refresh streams so the UI recovers.
+                stopped = true;
+                setMessage(null);
+                setError("");
+                setSelectedStream("");
+                fetchStreams().catch(() =>
+                    setError("Failed to reload streams."),
+                );
+                return;
+            } else if (!res.ok) {
                 const data = (await res.json().catch(() => ({}))) as {
                     error?: string;
                 };
+                // Stop polling when we get a non-recoverable error (e.g. auth or server error),
+                // so we don't repeatedly hammer the server and repeatedly show the error.
+                stopped = true;
+                setMessage(null);
                 setError(data.error ?? "Failed to load message.");
                 return;
             }
@@ -197,6 +227,7 @@ export default function MessagesPage() {
     }, [
         selectedAccountPublicKey,
         selectedStream,
+        streams,
         apiBase,
         token,
         logout,
@@ -210,52 +241,70 @@ export default function MessagesPage() {
             <div className="two-col">
                 <section className="panel">
                     <h3>Streams</h3>
-                    <select
-                        value={selectedAccountPublicKey}
-                        onChange={(e) =>
-                            setSelectedAccountPublicKey(e.target.value)
-                        }
-                        className="select-input"
-                    >
-                        <option value="">Select account…</option>
-                        {accounts
-                            .filter((acc) => !acc.isSystem)
-                            .map((acc) => (
-                                <option
-                                    key={acc.publicKey}
-                                    value={acc.publicKey}
-                                >
-                                    {acc.name} ({acc.operator})
-                                    {acc.jsEnabled ? "" : " - JS Disabled"}
-                                </option>
-                            ))}
-                    </select>
-                    <div style={{ marginTop: "0.75rem" }}>
-                        <ul className="list">
-                            {streams.length === 0 && (
-                                <li className="muted">No streams found.</li>
-                            )}
-                            {streams.map((s) => (
-                                <li
-                                    key={s.name}
-                                    className={`list-row${selectedStream === s.name ? " list-row--active" : ""}`}
-                                >
-                                    <button
-                                        type="button"
-                                        className="list-name-btn"
-                                        onClick={() =>
-                                            setSelectedStream(s.name)
-                                        }
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                        <label style={{ fontSize: "0.9rem", fontWeight: 600 }}>Account</label>
+                        <select
+                            aria-label="Select account"
+                            value={selectedAccountPublicKey}
+                            onChange={(e) => {
+                                setSelectedAccountPublicKey(e.target.value);
+                                // Clear selected stream when account changes so the user
+                                // explicitly chooses a stream for the selected account.
+                                setSelectedStream("");
+                                setError("");
+                            }}
+                            className="select-input"
+                        >
+                            <option value="">Select account…</option>
+                            {accounts
+                                .filter((acc) => !acc.isSystem)
+                                .map((acc) => (
+                                    <option
+                                        key={acc.publicKey}
+                                        value={acc.publicKey}
                                     >
-                                        {s.name}
-                                    </button>
-                                </li>
-                            ))}
-                        </ul>
+                                        {acc.name} ({acc.operator})
+                                        {acc.jsEnabled ? "" : " - JS Disabled"}
+                                    </option>
+                                ))}
+                        </select>
+
+                        <div style={{ marginTop: "0.25rem" }}>
+                            <label style={{ fontSize: "0.9rem", fontWeight: 600 }}>Streams</label>
+                            <ul className="list" style={{ marginTop: "0.5rem" }}>
+                                {streams.length === 0 && (
+                                    <li className="muted">No streams found.</li>
+                                )}
+                                {streams.map((s) => (
+                                    <li
+                                        key={s.name}
+                                        className={`list-row${selectedStream === s.name ? " list-row--active" : ""}`}
+                                    >
+                                        <button
+                                            type="button"
+                                            className="list-name-btn"
+                                            aria-pressed={selectedStream === s.name}
+                                            aria-label={`Select stream ${s.name}`}
+                                            onClick={() => setSelectedStream(s.name)}
+                                        >
+                                            {s.name}
+                                            {selectedStream === s.name && (
+                                                <span className="selected-badge">Selected</span>
+                                            )}
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
                     </div>
                 </section>
                 <section className="panel">
                     <h3>Latest Message</h3>
+                    {selectedStream && (
+                        <div style={{ marginTop: "0.5rem", marginBottom: "0.5rem" }}>
+                            <span className="selected-badge">{selectedStream}</span>
+                        </div>
+                    )}
                     {!selectedAccountPublicKey || !selectedStream ? (
                         <p>Select account and stream to begin polling.</p>
                     ) : message ? (

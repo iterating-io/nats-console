@@ -235,8 +235,9 @@ button:disabled {
 }
 
 .list-row {
-    display: flex;
-    justify-content: space-between;
+    border-color: #f18f55;
+    background: rgba(241, 143, 85, 0.14);
+    box-shadow: inset 4px 0 0 0 #f18f55;
     align-items: center;
 }
 
@@ -245,15 +246,40 @@ button:disabled {
     background: rgba(241, 143, 85, 0.08);
 }
 
+.list-row--active .list-name-btn {
+    color: #f18f55;
+    font-weight: 700;
+}
+
+.selected-badge {
+    display: inline-block;
+    margin-left: 0.75rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #f18f55;
+    background: rgba(241, 143, 85, 0.08);
+    border: 1px solid rgba(241, 143, 85, 0.18);
+}
+
 .list-name-btn {
     background: transparent;
     border: none;
     color: #e8ecee;
     font-size: 14px;
-    padding: 0;
+    padding: 8px 0;
     cursor: pointer;
     text-align: left;
     font-weight: 500;
+    display: block;
+    flex: 1 1 auto;
+    width: 100%;
+    text-align: left;
+    font-weight: 500;
+    display: block;
+    flex: 1 1 auto;
+    width: 100%;
 }
 
 .list-name-btn:hover {

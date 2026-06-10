@@ -30,14 +30,21 @@ export default function StreamList({
                         <button
                             type="button"
                             className="list-name-btn"
+                            aria-pressed={selected === s.name}
                             onClick={() => onSelect(s.name)}
                         >
                             {s.name}
+                            {selected === s.name && (
+                                <span className="selected-badge">Selected</span>
+                            )}
                         </button>
                         <button
                             type="button"
                             className="delete-btn"
-                            onClick={() => onDelete(s.name)}
+                            onClick={() => {
+                                if (!window.confirm(`Delete stream '${s.name}'?`)) return;
+                                onDelete(s.name);
+                            }}
                         >
                             Delete
                         </button>

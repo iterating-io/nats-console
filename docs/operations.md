@@ -176,3 +176,38 @@ Transient session notes were recorded at `.github/sessions/session-20260610-1035
 and have been removed after consolidation into this document.
 
 This recreates only the NATS container and clears the container-local JetStream store used by this setup, while keeping generated auth files and named volumes intact.
+
+## Session: session-20260610-153000 (finalized 2026-06-10)
+
+Summary:
+
+- Problem: On the Messages page, switching accounts could leave the UI polling a stream that no longer existed, producing repeated "stream not found" errors and continuing background polling.
+
+Actions and commits (chronological):
+
+- `1421754` — fix(messages): stop polling when stream missing; avoid repeated 'stream not found' errors
+- `bc83d84` — fix(messages): require explicit stream selection; clear stream on account change
+- `37fa354` — fix(messages): clear message/seq/error when switching streams
+- `8a5cb02` — chore(ui): label account and streams in MessagesPage for clarity and accessibility
+- `459e373` — chore(ui): make list-name-btn fill row so list items are easier to click
+- `86f9dfb` — feat(ui): make selected stream visually prominent; add 'Selected' badge and show active stream in message panel
+- `7d2fc94` — fix(ui): require confirmation before delete actions to avoid accidental removals
+- `400acda` — chore(sessions): update session file with performed actions and commit history
+
+Files changed (summary):
+
+- `web/src/pages/MessagesPage.tsx`
+- `web/src/App.css`
+- `web/src/components/Streams/StreamList.tsx`
+- `web/src/components/Streams/StreamDetail.tsx`
+- `web/src/components/Consumers/ConsumerList.tsx`
+
+Status:
+
+- Session work consolidated into this documentation entry and the repository commits listed above.
+- Temporary session file `.github/sessions/session-20260610-153000.md` has been removed as part of session close.
+
+Notes:
+
+- If any accidental deletions happened during testing, provide details (resource type, identifier, approximate time) and I will investigate recovery options.
+
