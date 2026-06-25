@@ -6,6 +6,7 @@ export type User = {
     name: string;
     publicKey: string;
     publishAllow: string[];
+    publishDeny?: string[];
 };
 
 export type Account = {

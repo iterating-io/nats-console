@@ -8,6 +8,8 @@ type Props = {
     onDeleteUser: (name: string) => Promise<void>;
     onAddPublishAllow: (userName: string, subject: string) => Promise<void>;
     onRemovePublishAllow: (userName: string, subject: string) => Promise<void>;
+    onAddPublishDeny?: (userName: string, subject: string) => Promise<void>;
+    onRemovePublishDeny?: (userName: string, subject: string) => Promise<void>;
     onGetCreds: (userName: string) => Promise<string>;
 };
 
@@ -25,6 +27,7 @@ export default function UserList({
     onDeleteUser,
     onAddPublishAllow,
     onRemovePublishAllow,
+    onAddPublishDeny,
     onGetCreds,
 }: Props) {
     const [newUserName, setNewUserName] = useState("");
@@ -209,6 +212,23 @@ export default function UserList({
                                     </button>
                                 </span>
                             ))}
+                            {u.name === "stream-reader" && (
+                                <div style={{ marginLeft: "0.5rem" }}>
+                                    {/* Only allow revoking purge (adding the deny). Do not show a "Grant Purge" button. */}
+                                    {(!u.publishDeny || !u.publishDeny.includes("$JS.API.STREAM.PURGE.>")) && (
+                                        <button
+                                            type="button"
+                                            onClick={() =>
+                                                onAddPublishDeny &&
+                                                onAddPublishDeny(u.name, "$JS.API.STREAM.PURGE.>")
+                                            }
+                                            style={{ fontSize: "0.78em" }}
+                                        >
+                                            Revoke Purge
+                                        </button>
+                                    )}
+                                </div>
+                            )}
                         </div>
                         <div
                             style={{

@@ -226,9 +226,60 @@ export default function StreamDetail({
 
     const sortedSubjects = [...stream.subjects].sort();
 
+    const handlePurge = async () => {
+        if (!stream) return;
+        if (!window.confirm(`Purge all messages from stream '${streamName}'? This cannot be undone.`)) return;
+        setError("");
+        setLoading(true);
+        try {
+            const res = await fetch(
+                withAccountScope(`${apiBase}/api/v1/streams/${encodeURIComponent(streamName)}/purge`),
+                { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+            );
+            if (res.status === 401) {
+                onAuthError();
+                return;
+            }
+            if (!res.ok) {
+                const data = (await res.json().catch(() => ({}))) as { error?: string };
+                setError(data.error ?? "Failed to purge stream.");
+                return;
+            }
+            // reload stream details and consumers
+            const streamRes = await fetch(
+                withAccountScope(`${apiBase}/api/v1/streams/${encodeURIComponent(streamName)}`),
+                { headers: { Authorization: `Bearer ${token}` } },
+            );
+            if (streamRes.status === 401) {
+                onAuthError();
+                return;
+            }
+            if (streamRes.ok) {
+                const streamData = (await streamRes.json()) as StreamDetailType;
+                setStream({ ...streamData, subjects: streamData.subjects ?? [] });
+            } else {
+                setError("Failed to reload stream after purge.");
+            }
+            await fetchConsumers(streamName);
+        } catch {
+            setError("Failed to purge stream.");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <section className="panel">
-            <h3>{stream.name}</h3>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <h3>{stream.name}</h3>
+                <button
+                    type="button"
+                    onClick={handlePurge}
+                    style={{ background: "#b00020", color: "white", border: "none", padding: "0.4rem 0.6rem", borderRadius: 4 }}
+                >
+                    Purge
+                </button>
+            </div>
             <div className="stack">
                 <div>
                     <strong>Subjects:</strong>

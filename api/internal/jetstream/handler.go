@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nkeys"
 
 	"github.com/iterating-io/nats-console/api/internal/accounts"
 	"github.com/iterating-io/nats-console/api/internal/config"
@@ -164,6 +165,67 @@ func (h *Handler) DeleteStream(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) PurgeStream(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	// Use a short-lived ephemeral user JWT that is allowed to publish only
+	// to the purge subject for this stream. This keeps stored users like
+	// `stream-reader` read-only and avoids persisting new credentials.
+	accountPublicKey := strings.TrimSpace(r.URL.Query().Get("accountPublicKey"))
+	if accountPublicKey == "" {
+		writeError(w, http.StatusBadRequest, "accountPublicKey query parameter is required")
+		return
+	}
+	account, ok := h.repo.FindAnyByPublicKey(accountPublicKey)
+	if !ok {
+		writeError(w, http.StatusNotFound, "account not found")
+		return
+	}
+	signingKey, err := h.accountsSvc.EnsureAccountSigningKey(account.Operator, account.PublicKey)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to prepare account signing key")
+		return
+	}
+
+	purgeSubject := "$JS.API.STREAM.PURGE." + name
+	userJWT, userSeed, err := generateEphemeralPurgeJWT(signingKey.Seed, accountPublicKey, purgeSubject, 1*time.Minute)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to generate ephemeral purge jwt")
+		return
+	}
+
+	nc, err := nats.Connect(h.cfg.NATSURL, nats.Name("nats-console-api-js-purge"), nats.Timeout(10*time.Second), nats.UserJWT(
+		func() (string, error) { return userJWT, nil },
+		func(nonce []byte) ([]byte, error) {
+			kp, err := nkeys.FromSeed(userSeed)
+			if err != nil {
+				return nil, err
+			}
+			return kp.Sign(nonce)
+		},
+	))
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to connect to nats for purge: "+err.Error())
+		return
+	}
+	js, err := nc.JetStream()
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "jetstream unavailable for account")
+		nc.Close()
+		return
+	}
+	if err := js.PurgeStream(name); err != nil {
+		writeJetStreamError(w, err, "failed to purge stream")
+		nc.Close()
+		return
+	}
+	nc.Close()
 	w.WriteHeader(http.StatusNoContent)
 }
 

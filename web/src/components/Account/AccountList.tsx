@@ -56,6 +56,18 @@ type Props = {
         userName: string,
         subject: string,
     ) => Promise<void>;
+    onAddUserPublishDeny: (
+        operator: string,
+        accountPublicKey: string,
+        userName: string,
+        subject: string,
+    ) => Promise<void>;
+    onRemoveUserPublishDeny: (
+        operator: string,
+        accountPublicKey: string,
+        userName: string,
+        subject: string,
+    ) => Promise<void>;
     onGetUserCreds: (
         operator: string,
         accountPublicKey: string,
@@ -92,6 +104,8 @@ export default function AccountList({
     onDeleteUser,
     onAddUserPublishAllow,
     onRemoveUserPublishAllow,
+    onAddUserPublishDeny,
+    onRemoveUserPublishDeny,
     onGetUserCreds,
     onGetAccountJWT,
     onToggleJetStream,
@@ -467,6 +481,22 @@ export default function AccountList({
                                         acc.operator,
                                         acc.publicKey,
                                         userName,
+                                    )
+                                }
+                                onAddPublishDeny={(userName, subject) =>
+                                    onAddUserPublishDeny(
+                                        acc.operator,
+                                        acc.publicKey,
+                                        userName,
+                                        subject,
+                                    )
+                                }
+                                onRemovePublishDeny={(userName, subject) =>
+                                    onRemoveUserPublishDeny(
+                                        acc.operator,
+                                        acc.publicKey,
+                                        userName,
+                                        subject,
                                     )
                                 }
                             />

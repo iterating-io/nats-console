@@ -78,6 +78,7 @@ export default function AccountsPage() {
                         ...u,
                         publicKey: u.publicKey ?? "",
                         publishAllow: u.publishAllow ?? [],
+                        publishDeny: u.publishDeny ?? [],
                     })),
                 })),
             );
@@ -599,6 +600,72 @@ export default function AccountsPage() {
         await fetchAll();
     };
 
+    const handleAddUserPublishDeny = async (
+        operator: string,
+        accountPublicKey: string,
+        userName: string,
+        subject: string,
+    ) => {
+        setError("");
+        const res = await fetch(
+            `${apiBase}/api/v1/accounts/${encodeURIComponent(operator)}/${encodeURIComponent(accountPublicKey)}/users/${encodeURIComponent(userName)}/publish-deny`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ subject }),
+            },
+        );
+        if (res.status === 401) {
+            logout();
+            navigate("/");
+            return;
+        }
+        if (!res.ok) {
+            const data = (await res.json().catch(() => ({}))) as {
+                error?: string;
+            };
+            setError(data.error ?? "Failed to add deny subject.");
+            return;
+        }
+        await fetchAll();
+    };
+
+    const handleRemoveUserPublishDeny = async (
+        operator: string,
+        accountPublicKey: string,
+        userName: string,
+        subject: string,
+    ) => {
+        setError("");
+        const res = await fetch(
+            `${apiBase}/api/v1/accounts/${encodeURIComponent(operator)}/${encodeURIComponent(accountPublicKey)}/users/${encodeURIComponent(userName)}/publish-deny`,
+            {
+                method: "DELETE",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ subject }),
+            },
+        );
+        if (res.status === 401) {
+            logout();
+            navigate("/");
+            return;
+        }
+        if (!res.ok) {
+            const data = (await res.json().catch(() => ({}))) as {
+                error?: string;
+            };
+            setError(data.error ?? "Failed to remove deny subject.");
+            return;
+        }
+        await fetchAll();
+    };
+
     const handleRemoveUserPublishAllow = async (
         operator: string,
         accountPublicKey: string,
@@ -733,6 +800,8 @@ export default function AccountsPage() {
                             onRemoveUserPublishAllow={
                                 handleRemoveUserPublishAllow
                             }
+                            onAddUserPublishDeny={handleAddUserPublishDeny}
+                            onRemoveUserPublishDeny={handleRemoveUserPublishDeny}
                             onGetUserCreds={handleGetUserCreds}
                             onGetAccountJWT={handleGetAccountJWT}
                             onToggleJetStream={handleToggleJetStream}

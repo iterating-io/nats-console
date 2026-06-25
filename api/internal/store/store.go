@@ -421,6 +421,20 @@ func (s *Store) AddUserPublishDeny(operator, accountPublicKey, user, subject str
 	return s.GetUser(operator, accountPublicKey, user)
 }
 
+func (s *Store) RemoveUserPublishDeny(operator, accountPublicKey, user, subject string) (*User, error) {
+	if _, err := s.GetUser(operator, accountPublicKey, user); err != nil {
+		return nil, err
+	}
+	_, err := s.db.Exec(
+		"DELETE FROM user_publish_deny WHERE operator = ? AND account_public_key = ? AND user_name = ? AND subject = ?",
+		operator, accountPublicKey, user, subject,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return s.GetUser(operator, accountPublicKey, user)
+}
+
 func (s *Store) AddUserSubscribeAllow(operator, accountPublicKey, user, subject string) (*User, error) {
 	if _, err := s.GetUser(operator, accountPublicKey, user); err != nil {
 		return nil, err

@@ -128,6 +128,14 @@ func (h *Handler) RemoveUserPublishAllow(w http.ResponseWriter, r *http.Request)
 	h.updateUserPublishAllow(w, r, h.store.RemoveUserPublishAllow)
 }
 
+func (h *Handler) AddUserPublishDeny(w http.ResponseWriter, r *http.Request) {
+	h.updateUserPublishAllow(w, r, h.store.AddUserPublishDeny)
+}
+
+func (h *Handler) RemoveUserPublishDeny(w http.ResponseWriter, r *http.Request) {
+	h.updateUserPublishAllow(w, r, h.store.RemoveUserPublishDeny)
+}
+
 func (h *Handler) ListAllUsers(w http.ResponseWriter, _ *http.Request) {
 	list, err := h.store.ListAllUsers()
 	if err != nil {
