@@ -134,6 +134,21 @@ Runtime requirements:
 
 This image keeps the same runtime model: API on `:9322` and Nginx serving web on `:9222` with `/api` reverse proxy.
 
+### GitHub Actions image publishing
+
+`.github/workflows/build-ghcr.yml` builds the console image for `linux/arm64`
+when manually dispatched from `main`. It pushes the image to:
+
+```text
+ghcr.io/iterating-io/nats-console/console:<short-sha>
+```
+
+The workflow uses `WEB_BASE_PATH=/console`, which matches the production
+ingress at `https://nats.iterating.io/console`. It does not access runtime
+secrets or the private Kubernetes registry. The infrastructure repository pulls
+the resulting ARM64 image and copies it to the private registry before Helm
+deployment.
+
 ## Troubleshooting
 
 ### `./run.sh up` stops at `Waiting for NATS...`

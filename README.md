@@ -30,10 +30,25 @@ NATS server must be configured with:
 
 ## Deployment
 
-Build the console image:
+The `Build and publish ARM64 console image` GitHub Actions workflow builds the
+ARM64 production image from `main` when run manually. It publishes the image to
+GHCR using the short commit SHA as its tag:
+
+```text
+ghcr.io/iterating-io/nats-console/console:<short-sha>
+```
+
+The image is built with `WEB_BASE_PATH=/console` for the
+`https://nats.iterating.io/console` ingress path. The infrastructure repository
+copies that image to the internal Kubernetes registry before deployment.
+
+For a local production-image build:
 
 ```bash
-docker build -f deploy/dockerfile.console -t nats-console:latest .
+docker build \
+  --build-arg WEB_BASE_PATH=/console \
+  -f deploy/dockerfile.console \
+  -t nats-console:latest .
 ```
 
 Run with pre-provisioned NATS credentials:
