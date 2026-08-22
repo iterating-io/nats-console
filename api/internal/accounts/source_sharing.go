@@ -12,13 +12,11 @@ import (
 const sourceSharePrefix = "nats-console-source-"
 const sourceEnabledTag = "nats-console-source-enabled"
 
-func sourceAPIExportName(target string) string { return sourceSharePrefix + "api-" + target }
+func sourceAPIExportName() string { return sourceSharePrefix + "api" }
 func sourceDeliveryExportName(target string) string {
 	return sourceSharePrefix + "delivery-" + target
 }
-func sourceFlowControlExportName(target string) string {
-	return sourceSharePrefix + "flow-control-" + target
-}
+func sourceFlowControlExportName() string      { return sourceSharePrefix + "flow-control" }
 func sourceAPIImportName(source string) string { return sourceSharePrefix + "api-" + source }
 func sourceDeliveryImportName(source string) string {
 	return sourceSharePrefix + "delivery-" + source
@@ -79,11 +77,16 @@ func (s *Service) GrantJetStreamSource(sourceAccount, targetAccount string) erro
 	}
 
 	removeManagedSourceShare(sourceClaims, targetClaims, sourceAccount, targetAccount)
+	normalizeSourceServiceExports(sourceClaims)
+	sourceClaims.Exports = removeOrphanedSourceDeliveryExports(sourceClaims.Exports, func(accountPublicKey string) bool {
+		_, found := s.repo.FindAnyByPublicKey(accountPublicKey)
+		return found
+	})
 	sourceClaims.Exports.Add(
-		&natsjwt.Export{Name: sourceAPIExportName(targetAccount), Subject: "$JS.API.CONSUMER.>", Type: natsjwt.Service, ResponseType: natsjwt.ResponseTypeStream, TokenReq: true},
 		&natsjwt.Export{Name: sourceDeliveryExportName(targetAccount), Subject: natsjwt.Subject(deliverySubject), Type: natsjwt.Stream, TokenReq: true},
-		&natsjwt.Export{Name: sourceFlowControlExportName(targetAccount), Subject: "$JS.FC.>", Type: natsjwt.Service, TokenReq: true},
 	)
+	ensureSourceServiceExport(sourceClaims, &natsjwt.Export{Name: sourceAPIExportName(), Subject: "$JS.API.CONSUMER.>", Type: natsjwt.Service, ResponseType: natsjwt.ResponseTypeStream, TokenReq: true})
+	ensureSourceServiceExport(sourceClaims, &natsjwt.Export{Name: sourceFlowControlExportName(), Subject: "$JS.FC.>", Type: natsjwt.Service, TokenReq: true})
 	targetClaims.Imports.Add(
 		&natsjwt.Import{Name: sourceAPIImportName(sourceAccount), Account: sourceAccount, Subject: "$JS.API.CONSUMER.>", LocalSubject: natsjwt.RenamingSubject(sourceAPIPrefix(sourceAccount) + ".CONSUMER.>"), Type: natsjwt.Service, Token: apiToken},
 		&natsjwt.Import{Name: sourceDeliveryImportName(sourceAccount), Account: sourceAccount, Subject: natsjwt.Subject(deliverySubject), Type: natsjwt.Stream, Token: deliveryToken},
@@ -116,8 +119,36 @@ func sourceActivationToken(target, source, subject string, kind natsjwt.ExportTy
 }
 
 func removeManagedSourceShare(source, target *natsjwt.AccountClaims, sourceKey, targetKey string) {
-	source.Exports = removeExports(source.Exports, sourceAPIExportName(targetKey), sourceDeliveryExportName(targetKey), sourceFlowControlExportName(targetKey))
+	source.Exports = removeExports(source.Exports, sourceDeliveryExportName(targetKey))
 	target.Imports = removeImports(target.Imports, sourceAPIImportName(sourceKey), sourceDeliveryImportName(sourceKey), sourceFlowControlImportName(sourceKey))
+}
+
+// normalizeSourceServiceExports removes legacy target-specific service exports.
+// NATS permits one service export per subject, so all targets must share these
+// two exports and use their own activation tokens instead.
+func normalizeSourceServiceExports(claims *natsjwt.AccountClaims) {
+	claims.Exports = filterExports(claims.Exports, func(v *natsjwt.Export) bool {
+		return !(strings.HasPrefix(v.Name, sourceSharePrefix+"api-") || strings.HasPrefix(v.Name, sourceSharePrefix+"flow-control-"))
+	})
+}
+
+func ensureSourceServiceExport(claims *natsjwt.AccountClaims, export *natsjwt.Export) {
+	for _, existing := range claims.Exports {
+		if existing.Type == export.Type && existing.Subject == export.Subject {
+			return
+		}
+	}
+	claims.Exports.Add(export)
+}
+
+func removeOrphanedSourceDeliveryExports(exports natsjwt.Exports, accountExists func(string) bool) natsjwt.Exports {
+	return filterExports(exports, func(v *natsjwt.Export) bool {
+		if !strings.HasPrefix(v.Name, sourceSharePrefix+"delivery-") {
+			return true
+		}
+		target := strings.TrimPrefix(v.Name, sourceSharePrefix+"delivery-")
+		return target == "" || accountExists(target)
+	})
 }
 func removeExports(exports natsjwt.Exports, names ...string) natsjwt.Exports {
 	return filterExports(exports, func(v *natsjwt.Export) bool {

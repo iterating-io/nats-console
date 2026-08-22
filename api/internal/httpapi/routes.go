@@ -11,6 +11,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/streams/{name}", s.authHandler.WithAuth(s.jetstreamHandler.GetStream))
 	mux.HandleFunc("PATCH /api/v1/streams/{name}", s.authHandler.WithAuth(s.jetstreamHandler.UpdateStream))
 	mux.HandleFunc("POST /api/v1/streams/{name}/sources", s.authHandler.WithAuth(s.jetstreamHandler.AddStreamSource))
+	mux.HandleFunc("PATCH /api/v1/streams/{name}/sources", s.authHandler.WithAuth(s.jetstreamHandler.UpdateStreamSource))
+	mux.HandleFunc("DELETE /api/v1/streams/{name}/sources", s.authHandler.WithAuth(s.jetstreamHandler.RemoveStreamSourceFilter))
 	mux.HandleFunc("POST /api/v1/messages", s.authHandler.WithAuth(s.jetstreamHandler.PublishMessage))
 	mux.HandleFunc("DELETE /api/v1/streams/{name}", s.authHandler.WithAuth(s.jetstreamHandler.DeleteStream))
 	mux.HandleFunc("POST /api/v1/streams/{name}/purge", s.authHandler.WithAuth(s.jetstreamHandler.PurgeStream))

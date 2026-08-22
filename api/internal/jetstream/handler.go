@@ -162,6 +162,7 @@ func (h *Handler) AddStreamSource(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		SourceAccountPublicKey string `json:"sourceAccountPublicKey"`
 		SourceName             string `json:"sourceName"`
+		FilterSubject          string `json:"filterSubject"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -169,6 +170,7 @@ func (h *Handler) AddStreamSource(w http.ResponseWriter, r *http.Request) {
 	}
 	req.SourceAccountPublicKey = strings.TrimSpace(req.SourceAccountPublicKey)
 	req.SourceName = strings.TrimSpace(req.SourceName)
+	req.FilterSubject = strings.TrimSpace(req.FilterSubject)
 	if name == "" || req.SourceAccountPublicKey == "" || req.SourceName == "" {
 		writeError(w, http.StatusBadRequest, "stream and source are required")
 		return
@@ -198,28 +200,22 @@ func (h *Handler) AddStreamSource(w http.ResponseWriter, r *http.Request) {
 	}
 	source := &nats.StreamSource{Name: req.SourceName}
 	if req.SourceAccountPublicKey != targetAccount {
-		claims, err := h.accountsSvc.LookupAccountClaims(req.SourceAccountPublicKey)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "source account is unavailable")
-			return
-		}
-		allowed := false
-		for _, account := range accounts.SourceExportTargets(claims) {
-			if account == targetAccount {
-				allowed = true
-				break
-			}
-		}
-		if !allowed {
-			writeError(w, http.StatusForbidden, "source account has not granted access to this account")
-			return
-		}
 		source.External = &nats.ExternalStream{APIPrefix: "$JS.SOURCE." + req.SourceAccountPublicKey + ".API", DeliverPrefix: "$JS.SOURCE." + targetAccount}
 	}
-	sources, err := appendStreamSource(info.Config.Sources, source)
-	if err != nil {
-		writeError(w, http.StatusConflict, err.Error())
-		return
+	sources := info.Config.Sources
+	for _, additional := range streamSourcesForFilters(source, streamSourceFilters(req.FilterSubject)) {
+		var err error
+		sources, err = appendStreamSource(sources, additional)
+		if err != nil {
+			writeError(w, http.StatusConflict, err.Error())
+			return
+		}
+	}
+	if req.SourceAccountPublicKey != targetAccount {
+		if err := h.accountsSvc.GrantJetStreamSource(req.SourceAccountPublicKey, targetAccount); err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 	info.Config.Sources = sources
 	if _, err = js.UpdateStream(&info.Config); err != nil {
@@ -227,6 +223,122 @@ func (h *Handler) AddStreamSource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"source": source})
+}
+
+func (h *Handler) UpdateStreamSource(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	var req struct {
+		SourceAccountPublicKey string `json:"sourceAccountPublicKey"`
+		SourceName             string `json:"sourceName"`
+		CurrentFilterSubject   string `json:"currentFilterSubject"`
+		FilterSubject          string `json:"filterSubject"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.SourceAccountPublicKey = strings.TrimSpace(req.SourceAccountPublicKey)
+	req.SourceName = strings.TrimSpace(req.SourceName)
+	req.CurrentFilterSubject = strings.TrimSpace(req.CurrentFilterSubject)
+	req.FilterSubject = strings.TrimSpace(req.FilterSubject)
+	if name == "" || req.SourceAccountPublicKey == "" || req.SourceName == "" {
+		writeError(w, http.StatusBadRequest, "stream and source are required")
+		return
+	}
+	targetAccount := strings.TrimSpace(r.URL.Query().Get("accountPublicKey"))
+	if targetAccount == "" {
+		writeError(w, http.StatusBadRequest, "accountPublicKey query parameter is required")
+		return
+	}
+	js, cleanup, ok := h.jetStreamForRequest(w, r)
+	if !ok {
+		return
+	}
+	defer cleanup()
+	info, err := js.StreamInfo(name)
+	if err != nil {
+		writeJetStreamError(w, err, "stream not found")
+		return
+	}
+	if info.State.Consumers > 0 {
+		writeError(w, http.StatusConflict, "cannot update a source after consumers exist")
+		return
+	}
+	source := &nats.StreamSource{Name: req.SourceName}
+	if req.SourceAccountPublicKey != targetAccount {
+		source.External = &nats.ExternalStream{
+			APIPrefix:     "$JS.SOURCE." + req.SourceAccountPublicKey + ".API",
+			DeliverPrefix: "$JS.SOURCE." + targetAccount,
+		}
+	}
+	sources, err := updateStreamSourceFilters(info.Config.Sources, source, req.CurrentFilterSubject, streamSourceFilters(req.FilterSubject))
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	info.Config.Sources = sources
+	if _, err = js.UpdateStream(&info.Config); err != nil {
+		writeJetStreamError(w, err, "failed to update stream source")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sources": sources})
+}
+
+func (h *Handler) RemoveStreamSourceFilter(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	var req struct {
+		SourceAccountPublicKey string `json:"sourceAccountPublicKey"`
+		SourceName             string `json:"sourceName"`
+		FilterSubject          string `json:"filterSubject"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.SourceAccountPublicKey = strings.TrimSpace(req.SourceAccountPublicKey)
+	req.SourceName = strings.TrimSpace(req.SourceName)
+	req.FilterSubject = strings.TrimSpace(req.FilterSubject)
+	if name == "" || req.SourceAccountPublicKey == "" || req.SourceName == "" || req.FilterSubject == "" {
+		writeError(w, http.StatusBadRequest, "stream, source, and filter are required")
+		return
+	}
+	targetAccount := strings.TrimSpace(r.URL.Query().Get("accountPublicKey"))
+	if targetAccount == "" {
+		writeError(w, http.StatusBadRequest, "accountPublicKey query parameter is required")
+		return
+	}
+	js, cleanup, ok := h.jetStreamForRequest(w, r)
+	if !ok {
+		return
+	}
+	defer cleanup()
+	info, err := js.StreamInfo(name)
+	if err != nil {
+		writeJetStreamError(w, err, "stream not found")
+		return
+	}
+	if info.State.Consumers > 0 {
+		writeError(w, http.StatusConflict, "cannot update a source after consumers exist")
+		return
+	}
+	source := &nats.StreamSource{Name: req.SourceName}
+	if req.SourceAccountPublicKey != targetAccount {
+		source.External = &nats.ExternalStream{
+			APIPrefix:     "$JS.SOURCE." + req.SourceAccountPublicKey + ".API",
+			DeliverPrefix: "$JS.SOURCE." + targetAccount,
+		}
+	}
+	sources, err := removeStreamSourceFilter(info.Config.Sources, source, req.FilterSubject)
+	if err != nil {
+		writeError(w, http.StatusNotFound, err.Error())
+		return
+	}
+	info.Config.Sources = sources
+	if _, err = js.UpdateStream(&info.Config); err != nil {
+		writeJetStreamError(w, err, "failed to remove stream source filter")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sources": sources})
 }
 
 func (h *Handler) PublishMessage(w http.ResponseWriter, r *http.Request) {

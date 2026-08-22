@@ -14,6 +14,12 @@ type StreamDetailType = {
     created?: string;
 };
 
+type SourceStream = {
+    name: string;
+    accountPublicKey: string;
+    filterSubjects: string[];
+};
+
 type Props = {
     streamName: string;
     token: string;
@@ -43,6 +49,9 @@ export default function StreamDetail({
     const [sourceAccountPublicKey, setSourceAccountPublicKey] = useState("");
     const [sourceStreams, setSourceStreams] = useState<string[]>([]);
     const [sourceName, setSourceName] = useState("");
+    const [sourceFilterInput, setSourceFilterInput] = useState("");
+    const [sourceFilters, setSourceFilters] = useState<string[]>([]);
+    const [sourceCardFilterInputs, setSourceCardFilterInputs] = useState<Record<string, string>>({});
     const [sourceLoading, setSourceLoading] = useState(false);
 
     const withAccountScope = (path: string) => {
@@ -248,15 +257,36 @@ export default function StreamDetail({
 
     const sortedSubjects = [...stream.subjects].sort();
     const rawSources: unknown = stream.config?.sources;
-    const sourceNames = Array.isArray(rawSources)
+    const configuredSources = Array.isArray(rawSources)
         ? rawSources
-              .flatMap((source): string[] => {
+              .flatMap((source): { name: string; accountPublicKey: string; filterSubject: string }[] => {
                   if (typeof source !== "object" || source === null) return [];
-                  const name = (source as { name?: unknown }).name;
-                  return typeof name === "string" ? [name] : [];
+                  const { name, filter_subject: filterSubject, external } = source as {
+                      name?: unknown;
+                      filter_subject?: unknown;
+                      external?: { api?: unknown };
+                  };
+                  if (typeof name !== "string") return [];
+                  const apiPrefix = typeof external?.api === "string" ? external.api : "";
+                  const sourceAccountMatch = /^\$JS\.SOURCE\.(.+)\.API$/.exec(apiPrefix);
+                  return [{
+                      name,
+                      accountPublicKey: sourceAccountMatch?.[1] ?? accountPublicKey ?? "",
+                      filterSubject: typeof filterSubject === "string" ? filterSubject : "",
+                  }];
               })
-              .sort()
+              .sort((a, b) => a.name.localeCompare(b.name))
         : [];
+    const sources = Array.from(
+        configuredSources.reduce((grouped, source) => {
+            const key = `${source.accountPublicKey}:${source.name}`;
+            const existing = grouped.get(key) ?? { name: source.name, accountPublicKey: source.accountPublicKey, filterSubjects: [] };
+            existing.filterSubjects.push(source.filterSubject);
+            grouped.set(key, existing);
+            return grouped;
+        }, new Map<string, SourceStream>()).values(),
+    );
+    const sourceKey = (source: SourceStream) => `${source.accountPublicKey}:${source.name}`;
 
     const handlePurge = async () => {
         if (!stream) return;
@@ -306,9 +336,58 @@ export default function StreamDetail({
         try {
             const res = await fetch(withAccountScope(`${apiBase}/api/v1/streams/${encodeURIComponent(streamName)}/sources`), {
                 method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-                body: JSON.stringify({ sourceAccountPublicKey, sourceName }),
+                body: JSON.stringify({ sourceAccountPublicKey, sourceName, filterSubject: sourceFilters.join(",") }),
             });
+            if (res.status === 401) { onAuthError(); return; }
             if (!res.ok) { const data = (await res.json().catch(() => ({}))) as { error?: string }; setError(data.error ?? "Failed to add stream source."); return; }
+            const streamRes = await fetch(withAccountScope(`${apiBase}/api/v1/streams/${encodeURIComponent(streamName)}`), { headers: { Authorization: `Bearer ${token}` } });
+            if (streamRes.ok) { const data = (await streamRes.json()) as StreamDetailType; setStream({ ...data, subjects: data.subjects ?? [] }); }
+            setSourceFilterInput("");
+            setSourceFilters([]);
+        } finally { setSourceLoading(false); }
+    };
+
+    const handleAddSourceFilter = () => {
+        const filter = sourceFilterInput.trim();
+        if (!filter || sourceFilters.includes(filter)) return;
+        setSourceFilters((prev) => [...prev, filter]);
+        setSourceFilterInput("");
+    };
+
+    const handleAddFilterToSource = async (source: SourceStream) => {
+        const key = sourceKey(source);
+        const filter = (sourceCardFilterInputs[key] ?? "").trim();
+        if (!filter || source.filterSubjects.includes(filter)) return;
+        setSourceLoading(true); setError("");
+        try {
+            const hasUnfilteredSource = source.filterSubjects.includes("");
+            const res = await fetch(withAccountScope(`${apiBase}/api/v1/streams/${encodeURIComponent(streamName)}/sources`), {
+                method: hasUnfilteredSource ? "PATCH" : "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({
+                    sourceAccountPublicKey: source.accountPublicKey,
+                    sourceName: source.name,
+                    ...(hasUnfilteredSource ? { currentFilterSubject: "" } : {}),
+                    filterSubject: filter,
+                }),
+            });
+            if (res.status === 401) { onAuthError(); return; }
+            if (!res.ok) { const data = (await res.json().catch(() => ({}))) as { error?: string }; setError(data.error ?? "Failed to add source filter."); return; }
+            const streamRes = await fetch(withAccountScope(`${apiBase}/api/v1/streams/${encodeURIComponent(streamName)}`), { headers: { Authorization: `Bearer ${token}` } });
+            if (streamRes.ok) { const data = (await streamRes.json()) as StreamDetailType; setStream({ ...data, subjects: data.subjects ?? [] }); }
+            setSourceCardFilterInputs((prev) => ({ ...prev, [key]: "" }));
+        } finally { setSourceLoading(false); }
+    };
+
+    const handleRemoveFilterFromSource = async (source: SourceStream, filter: string) => {
+        if (!window.confirm(`Remove filter '${filter}' from source '${source.name}'?`)) return;
+        setSourceLoading(true); setError("");
+        try {
+            const res = await fetch(withAccountScope(`${apiBase}/api/v1/streams/${encodeURIComponent(streamName)}/sources`), {
+                method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ sourceAccountPublicKey: source.accountPublicKey, sourceName: source.name, filterSubject: filter }),
+            });
+            if (res.status === 401) { onAuthError(); return; }
+            if (!res.ok) { const data = (await res.json().catch(() => ({}))) as { error?: string }; setError(data.error ?? "Failed to remove source filter."); return; }
             const streamRes = await fetch(withAccountScope(`${apiBase}/api/v1/streams/${encodeURIComponent(streamName)}`), { headers: { Authorization: `Bearer ${token}` } });
             if (streamRes.ok) { const data = (await streamRes.json()) as StreamDetailType; setStream({ ...data, subjects: data.subjects ?? [] }); }
         } finally { setSourceLoading(false); }
@@ -392,7 +471,7 @@ export default function StreamDetail({
 
                 <div>
                     <strong>Source Streams:</strong>
-                    {sourceNames.length === 0 ? (
+                    {sources.length === 0 ? (
                         <span
                             className="muted"
                             style={{ marginLeft: "0.5rem", fontSize: "0.85em" }}
@@ -401,9 +480,37 @@ export default function StreamDetail({
                         </span>
                     ) : (
                         <ul className="list">
-                            {sourceNames.map((name, index) => (
-                                <li key={`${name}-${index}`} className="list-row">
-                                    <code>{name}</code>
+                            {sources.map((source) => (
+                                <li key={sourceKey(source)} className="list-row">
+                                    <div>
+                                        <code>{source.name}</code>
+                                        {source.filterSubjects.length === 1 && source.filterSubjects[0] === "" && <span className="muted" style={{ marginLeft: "0.5rem" }}>no filter</span>}
+                                    </div>
+                                    {source.filterSubjects.filter(Boolean).length > 0 && (
+                                        <ul className="list" style={{ width: "100%", marginTop: "0.4rem" }}>
+                                            {source.filterSubjects.filter(Boolean).map((filter) => (
+                                                <li key={filter} className="list-row">
+                                                    <code>{filter}</code>
+                                                    <button type="button" className="delete-btn" disabled={sourceLoading} onClick={() => handleRemoveFilterFromSource(source, filter)}>✕</button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                    <div style={{ display: "flex", gap: "0.4rem", width: "100%", marginTop: "0.4rem" }}>
+                                        <input
+                                            value={sourceCardFilterInputs[sourceKey(source)] ?? ""}
+                                            onChange={(e) => setSourceCardFilterInputs((prev) => ({ ...prev, [sourceKey(source)]: e.target.value }))}
+                                            placeholder="Subject filter"
+                                            disabled={sourceLoading}
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                    e.preventDefault();
+                                                    handleAddFilterToSource(source);
+                                                }
+                                            }}
+                                        />
+                                        <button type="button" disabled={sourceLoading || !(sourceCardFilterInputs[sourceKey(source)] ?? "").trim()} onClick={() => handleAddFilterToSource(source)}>{sourceLoading ? "Adding…" : "Add filter"}</button>
+                                    </div>
                                 </li>
                             ))}
                         </ul>
@@ -412,7 +519,7 @@ export default function StreamDetail({
 
                 {consumers.length === 0 && (
                     <div className="stack">
-                        <strong>{sourceNames.length === 0 ? "Add Source" : "Add Another Source"}</strong>
+                        <strong>{sources.length === 0 ? "Add Source" : "Add Another Source"}</strong>
                         <select value={sourceAccountPublicKey} onChange={(e) => setSourceAccountPublicKey(e.target.value)}>
                             <option value="">Select source account…</option>
                             {sourceAccounts.map((account) => <option key={account.publicKey} value={account.publicKey}>{account.name}</option>)}
@@ -421,6 +528,31 @@ export default function StreamDetail({
                             <option value="">Select source stream…</option>
                             {sourceStreams.filter((name) => !(sourceAccountPublicKey === accountPublicKey && name === streamName)).map((name) => <option key={name} value={name}>{name}</option>)}
                         </select>
+                        <div style={{ display: "flex", gap: "0.4rem" }}>
+                            <input
+                                value={sourceFilterInput}
+                                onChange={(e) => setSourceFilterInput(e.target.value)}
+                                placeholder="Subject filter (optional, e.g. orders.created)"
+                                disabled={sourceLoading}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        handleAddSourceFilter();
+                                    }
+                                }}
+                            />
+                            <button type="button" disabled={sourceLoading || !sourceFilterInput.trim()} onClick={handleAddSourceFilter}>Add filter</button>
+                        </div>
+                        {sourceFilters.length > 0 && (
+                            <ul className="list">
+                                {sourceFilters.map((filter) => (
+                                    <li key={filter} className="list-row">
+                                        <code>{filter}</code>
+                                        <button type="button" className="delete-btn" disabled={sourceLoading} onClick={() => setSourceFilters((prev) => prev.filter((value) => value !== filter))}>✕</button>
+                                    </li>
+                                ))}
+                            </ul>
+                        )}
                         <button type="button" disabled={sourceLoading || !sourceName} onClick={handleAddSource}>{sourceLoading ? "Adding…" : "Add Source"}</button>
                     </div>
                 )}

@@ -209,20 +209,10 @@ func (h *Handler) ListJetStreamSourceAccounts(w http.ResponseWriter, r *http.Req
 		if !candidate.JSEnabled || !candidate.SourceEnabled {
 			continue
 		}
-		if candidate.PublicKey == targetAccount {
-			available = append(available, candidate)
-			continue
-		}
-		claims, err := h.service.LookupAccountClaims(candidate.PublicKey)
-		if err != nil {
-			continue
-		}
-		for _, granted := range SourceExportTargets(claims) {
-			if granted == targetAccount {
-				available = append(available, candidate)
-				break
-			}
-		}
+		// A source grant is created when the user adds a source to a stream.
+		// Showing every account that has opted into source sharing lets a newly
+		// created target account select the source without a separate grant step.
+		available = append(available, candidate)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"accounts": available})
 }

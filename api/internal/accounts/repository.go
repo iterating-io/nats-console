@@ -263,9 +263,12 @@ func (r *Repository) UpsertLoaded(loaded []Record) {
 	for _, acc := range loaded {
 		key := acc.Operator + "/" + acc.Name
 		if idx, found := existing[key]; found {
+			r.accounts[idx].PublicKey = acc.PublicKey
+			r.accounts[idx].IsSystem = acc.IsSystem
 			r.accounts[idx].PublishAllow = acc.PublishAllow
 			r.accounts[idx].SubscribeAllow = acc.SubscribeAllow
 			r.accounts[idx].JSEnabled = acc.JSEnabled
+			r.accounts[idx].SourceEnabled = acc.SourceEnabled
 			continue
 		}
 		r.accounts = append(r.accounts, acc)

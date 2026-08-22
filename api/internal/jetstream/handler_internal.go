@@ -54,7 +54,83 @@ func appendStreamSource(sources []*nats.StreamSource, source *nats.StreamSource)
 	return append(sources, source), nil
 }
 
+func streamSourceFilters(value string) []string {
+	filters := []string{}
+	seen := map[string]struct{}{}
+	for _, filter := range strings.Split(value, ",") {
+		filter = strings.TrimSpace(filter)
+		if filter == "" {
+			continue
+		}
+		if _, found := seen[filter]; found {
+			continue
+		}
+		seen[filter] = struct{}{}
+		filters = append(filters, filter)
+	}
+	return filters
+}
+
+func streamSourcesForFilters(source *nats.StreamSource, filters []string) []*nats.StreamSource {
+	if len(filters) == 0 {
+		filters = []string{""}
+	}
+	result := make([]*nats.StreamSource, 0, len(filters))
+	for _, filter := range filters {
+		copy := *source
+		copy.FilterSubject = filter
+		result = append(result, &copy)
+	}
+	return result
+}
+
+// updateStreamSourceFilter changes the filter on one configured source while
+// retaining its account routing and every other source setting.
+func updateStreamSourceFilters(sources []*nats.StreamSource, source *nats.StreamSource, currentFilter string, filters []string) ([]*nats.StreamSource, error) {
+	updated := make([]*nats.StreamSource, 0, len(sources)+len(filters))
+	var existingSource *nats.StreamSource
+	for _, existing := range sources {
+		if !sameStreamSourceIdentity(existing, source) || existing.FilterSubject != currentFilter {
+			updated = append(updated, existing)
+			continue
+		}
+		existingSource = existing
+	}
+	if existingSource == nil {
+		return nil, errors.New("stream source is not configured")
+	}
+	for _, replacement := range streamSourcesForFilters(existingSource, filters) {
+		for _, existing := range updated {
+			if sameStreamSource(existing, replacement) {
+				return nil, errors.New("stream source is already configured")
+			}
+		}
+		updated = append(updated, replacement)
+	}
+	return updated, nil
+}
+
+func removeStreamSourceFilter(sources []*nats.StreamSource, source *nats.StreamSource, filter string) ([]*nats.StreamSource, error) {
+	updated := make([]*nats.StreamSource, 0, len(sources)-1)
+	removed := false
+	for _, existing := range sources {
+		if sameStreamSourceIdentity(existing, source) && existing.FilterSubject == filter && !removed {
+			removed = true
+			continue
+		}
+		updated = append(updated, existing)
+	}
+	if !removed {
+		return nil, errors.New("stream source filter is not configured")
+	}
+	return updated, nil
+}
+
 func sameStreamSource(a, b *nats.StreamSource) bool {
+	return sameStreamSourceIdentity(a, b) && a.FilterSubject == b.FilterSubject
+}
+
+func sameStreamSourceIdentity(a, b *nats.StreamSource) bool {
 	if a == nil || b == nil || a.Name != b.Name {
 		return false
 	}

@@ -50,3 +50,54 @@ func TestAppendStreamSourceRejectsDuplicate(t *testing.T) {
 		t.Fatal("appendStreamSource() error = nil, want duplicate error")
 	}
 }
+
+func TestUpdateStreamSourceFiltersPreservesSourceConfiguration(t *testing.T) {
+	existing := &nats.StreamSource{
+		Name:          "ORDERS",
+		FilterSubject: "orders.created",
+		External:      &nats.ExternalStream{APIPrefix: "$JS.SOURCE.A.API", DeliverPrefix: "$JS.SOURCE.C"},
+	}
+	updated, err := updateStreamSourceFilters(
+		[]*nats.StreamSource{existing},
+		&nats.StreamSource{Name: "ORDERS", External: &nats.ExternalStream{APIPrefix: "$JS.SOURCE.A.API", DeliverPrefix: "$JS.SOURCE.C"}},
+		"orders.created",
+		[]string{"orders.updated", "orders.cancelled"},
+	)
+	if err != nil {
+		t.Fatalf("updateStreamSourceFilters() error = %v", err)
+	}
+	if len(updated) != 2 || updated[0].FilterSubject != "orders.updated" || updated[1].FilterSubject != "orders.cancelled" || updated[0].External != existing.External || updated[1].External != existing.External {
+		t.Fatalf("updateStreamSourceFilters() = %#v, want two updated filters with preserved external config", updated)
+	}
+	if existing.FilterSubject != "orders.created" {
+		t.Fatalf("updateStreamSourceFilters() mutated existing source: %#v", existing)
+	}
+}
+
+func TestUpdateStreamSourceFiltersRejectsUnknownSource(t *testing.T) {
+	_, err := updateStreamSourceFilters([]*nats.StreamSource{{Name: "ORDERS"}}, &nats.StreamSource{Name: "PAYMENTS"}, "", []string{"payments.>"})
+	if err == nil {
+		t.Fatal("updateStreamSourceFilters() error = nil, want unknown source error")
+	}
+}
+
+func TestStreamSourceFilters(t *testing.T) {
+	filters := streamSourceFilters(" orders.created, orders.updated, orders.created, ")
+	if len(filters) != 2 || filters[0] != "orders.created" || filters[1] != "orders.updated" {
+		t.Fatalf("streamSourceFilters() = %#v, want unique trimmed filters", filters)
+	}
+}
+
+func TestRemoveStreamSourceFilter(t *testing.T) {
+	source := &nats.StreamSource{Name: "ORDERS"}
+	updated, err := removeStreamSourceFilter([]*nats.StreamSource{
+		{Name: "ORDERS", FilterSubject: "orders.created"},
+		{Name: "ORDERS", FilterSubject: "orders.updated"},
+	}, source, "orders.created")
+	if err != nil {
+		t.Fatalf("removeStreamSourceFilter() error = %v", err)
+	}
+	if len(updated) != 1 || updated[0].FilterSubject != "orders.updated" {
+		t.Fatalf("removeStreamSourceFilter() = %#v, want remaining filter", updated)
+	}
+}
