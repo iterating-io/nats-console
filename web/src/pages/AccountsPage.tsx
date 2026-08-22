@@ -25,6 +25,7 @@ export default function AccountsPage() {
     const [error, setError] = useState("");
     const [capabilities, setCapabilities] =
         useState<AccountCapabilities | null>(null);
+    const [sourceImports, setSourceImports] = useState<Account[]>([]);
 
     const fetchAll = async () => {
         const [opRes, accRes] = await Promise.all([
@@ -391,6 +392,32 @@ export default function AccountsPage() {
         await fetchAll();
     };
 
+    const handleGrantJetStreamSource = async (
+        operator: string,
+        sourceAccountPublicKey: string,
+        targetAccountPublicKey: string,
+    ) => {
+        setError("");
+        const res = await fetch(
+            `${apiBase}/api/v1/accounts/${encodeURIComponent(operator)}/${encodeURIComponent(sourceAccountPublicKey)}/jetstream-source`,
+            { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ targetAccountPublicKey }) },
+        );
+        if (!res.ok) {
+            const data = (await res.json().catch(() => ({}))) as { error?: string };
+            setError(data.error ?? "Failed to grant JetStream source access.");
+            return;
+        }
+        await fetchAll();
+    };
+
+    const handleToggleJetStreamSource = async (operator: string, accountPublicKey: string, enabled: boolean) => {
+        const res = await fetch(`${apiBase}/api/v1/accounts/${encodeURIComponent(operator)}/${encodeURIComponent(accountPublicKey)}/jetstream-source-enabled`, {
+            method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify({ enabled }),
+        });
+        if (!res.ok) { const data = (await res.json().catch(() => ({}))) as { error?: string }; setError(data.error ?? "Failed to update source sharing."); return; }
+        await fetchAll();
+    };
+
     const handleGrantJSConsumerApiAccess = async (
         operator: string,
         name: string,
@@ -709,6 +736,16 @@ export default function AccountsPage() {
         (acc) => `${acc.operator}/${acc.publicKey}` === selectedAccountKey,
     );
 
+    useEffect(() => {
+        if (!selectedAccount2) { setSourceImports([]); return; }
+        fetch(`${apiBase}/api/v1/accounts/${encodeURIComponent(selectedAccount2.operator)}/${encodeURIComponent(selectedAccount2.publicKey)}/jetstream-sources`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then(async (res) => res.ok ? (res.json() as Promise<{ sources: Account[] }>) : { sources: [] })
+            .then((data) => setSourceImports(data.sources ?? []))
+            .catch(() => setSourceImports([]));
+    }, [selectedAccount2?.publicKey, accounts, apiBase, token]);
+
     return (
         <div className="page-stack">
             <h2>Operators & Accounts</h2>
@@ -785,6 +822,8 @@ export default function AccountsPage() {
                     {selectedAccount2 ? (
                         <AccountList
                             accounts={[selectedAccount2]}
+                            sourceCandidateAccounts={selectedAccounts}
+                            sourceImports={sourceImports}
                             canDeleteAccounts={
                                 capabilities !== null &&
                                 capabilities.accountDelete !== false
@@ -805,6 +844,8 @@ export default function AccountsPage() {
                             onGetUserCreds={handleGetUserCreds}
                             onGetAccountJWT={handleGetAccountJWT}
                             onToggleJetStream={handleToggleJetStream}
+                            onGrantJetStreamSource={handleGrantJetStreamSource}
+                            onToggleJetStreamSource={handleToggleJetStreamSource}
                             onGrantJSConsumerApiAccess={
                                 handleGrantJSConsumerApiAccess
                             }

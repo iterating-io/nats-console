@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useApiBase } from "../hooks/useApiBase";
@@ -24,6 +24,8 @@ export default function StreamsPage() {
     const [jsGrantSupported, setJsGrantSupported] = useState(false);
     const [jsGranting, setJsGranting] = useState(false);
     const [jsGrantError, setJsGrantError] = useState("");
+    const streamsRequestId = useRef(0);
+    const selectedAccountPublicKeyRef = useRef("");
 
     const selectedAccount = accounts.find(
         (acc) => acc.publicKey === selectedAccountPublicKey,
@@ -69,11 +71,8 @@ export default function StreamsPage() {
         setJsGranting(false);
     };
 
-    const buildStreamsURL = () => {
-        if (!selectedAccountPublicKey) {
-            return `${apiBase}/api/v1/streams`;
-        }
-        return `${apiBase}/api/v1/streams?accountPublicKey=${encodeURIComponent(selectedAccountPublicKey)}`;
+    const buildStreamsURL = (accountPublicKey: string) => {
+        return `${apiBase}/api/v1/streams?accountPublicKey=${encodeURIComponent(accountPublicKey)}`;
     };
 
     const fetchAccounts = async () => {
@@ -94,6 +93,7 @@ export default function StreamsPage() {
         setAccounts(nextAccounts);
         setSelectedAccountPublicKey((prev) => {
             if (prev && nextAccounts.some((acc) => acc.publicKey === prev)) {
+                selectedAccountPublicKeyRef.current = prev;
                 return prev;
             }
             const firstAvailable =
@@ -106,14 +106,28 @@ export default function StreamsPage() {
                 ) ??
                 nextAccounts.find((acc) => !acc.isSystem && acc.jsEnabled) ??
                 nextAccounts.find((acc) => !acc.isSystem);
-            return firstAvailable?.publicKey ?? "";
+            const next = firstAvailable?.publicKey ?? "";
+            selectedAccountPublicKeyRef.current = next;
+            return next;
         });
     };
 
-    const fetchStreams = async () => {
-        const res = await fetch(buildStreamsURL(), {
+    const fetchStreams = async (accountPublicKey = selectedAccountPublicKey) => {
+        if (!accountPublicKey) {
+            setStreams([]);
+            setSelected("");
+            return;
+        }
+        const requestId = ++streamsRequestId.current;
+        const res = await fetch(buildStreamsURL(accountPublicKey), {
             headers: { Authorization: `Bearer ${token}` },
         });
+        if (
+            requestId !== streamsRequestId.current ||
+            accountPublicKey !== selectedAccountPublicKeyRef.current
+        ) {
+            return;
+        }
         if (res.status === 401) {
             logout();
             navigate("/");
@@ -144,12 +158,14 @@ export default function StreamsPage() {
 
     useEffect(() => {
         if (!selectedAccountPublicKey) {
+            streamsRequestId.current += 1;
             setStreams([]);
             setSelected("");
             setError("Please select an account to view streams.");
             return;
         }
         if (!selectedAccount?.jsEnabled) {
+            streamsRequestId.current += 1;
             setStreams([]);
             setSelected("");
             setError("JetStream is disabled for the selected account.");
@@ -160,8 +176,10 @@ export default function StreamsPage() {
     }, [selectedAccountPublicKey, selectedAccount?.jsEnabled]);
 
     const handleCreated = async (name: string, subjects: string[]) => {
+        const accountPublicKey = selectedAccountPublicKey;
+        if (!accountPublicKey) return;
         setError("");
-        const res = await fetch(buildStreamsURL(), {
+        const res = await fetch(buildStreamsURL(accountPublicKey), {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -176,7 +194,9 @@ export default function StreamsPage() {
             setError(data.error ?? "Failed to create stream.");
             return;
         }
-        await fetchStreams();
+        if (selectedAccountPublicKeyRef.current === accountPublicKey) {
+            await fetchStreams(accountPublicKey);
+        }
     };
 
     const handleDelete = async (name: string) => {
@@ -254,6 +274,8 @@ export default function StreamsPage() {
                         accounts={accounts}
                         selectedAccountPublicKey={selectedAccountPublicKey}
                         onSelectAccount={(next) => {
+                            streamsRequestId.current += 1;
+                            selectedAccountPublicKeyRef.current = next;
                             setSelectedAccountPublicKey(next);
                             setSelected("");
                             setError("");

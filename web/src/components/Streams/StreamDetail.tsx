@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import ConsumerList from "../Consumers/ConsumerList";
 import ConsumerForm from "../Consumers/ConsumerForm";
+import type { Account } from "../../types";
 
 type Consumer = { name: string; filterSubject: string };
 
@@ -38,6 +39,11 @@ export default function StreamDetail({
     const [subjectLoading, setSubjectLoading] = useState(false);
     const [showConfig, setShowConfig] = useState(false);
     const [showState, setShowState] = useState(false);
+    const [sourceAccounts, setSourceAccounts] = useState<Account[]>([]);
+    const [sourceAccountPublicKey, setSourceAccountPublicKey] = useState("");
+    const [sourceStreams, setSourceStreams] = useState<string[]>([]);
+    const [sourceName, setSourceName] = useState("");
+    const [sourceLoading, setSourceLoading] = useState(false);
 
     const withAccountScope = (path: string) => {
         if (!accountPublicKey) {
@@ -110,6 +116,22 @@ export default function StreamDetail({
             fetchData();
         }
     }, [streamName, token, apiBase, onAuthError, accountPublicKey]);
+
+    useEffect(() => {
+        if (!accountPublicKey) return;
+        fetch(`${apiBase}/api/v1/accounts/source-accounts?accountPublicKey=${encodeURIComponent(accountPublicKey)}`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(async (res) => res.ok ? (res.json() as Promise<{ accounts: Account[] }>) : { accounts: [] })
+            .then((data) => setSourceAccounts(data.accounts ?? []))
+            .catch(() => setSourceAccounts([]));
+    }, [accountPublicKey, apiBase, token]);
+
+    useEffect(() => {
+        if (!sourceAccountPublicKey) { setSourceStreams([]); setSourceName(""); return; }
+        fetch(`${apiBase}/api/v1/streams?accountPublicKey=${encodeURIComponent(sourceAccountPublicKey)}`, { headers: { Authorization: `Bearer ${token}` } })
+            .then(async (res) => res.ok ? (res.json() as Promise<{ streams: string[] }>) : { streams: [] })
+            .then((data) => { setSourceStreams(data.streams ?? []); setSourceName(""); })
+            .catch(() => setSourceStreams([]));
+    }, [sourceAccountPublicKey, apiBase, token]);
 
     const handleConsumerCreated = async (
         streamValue: string,
@@ -225,6 +247,16 @@ export default function StreamDetail({
     }
 
     const sortedSubjects = [...stream.subjects].sort();
+    const rawSources: unknown = stream.config?.sources;
+    const sourceNames = Array.isArray(rawSources)
+        ? rawSources
+              .flatMap((source): string[] => {
+                  if (typeof source !== "object" || source === null) return [];
+                  const name = (source as { name?: unknown }).name;
+                  return typeof name === "string" ? [name] : [];
+              })
+              .sort()
+        : [];
 
     const handlePurge = async () => {
         if (!stream) return;
@@ -267,6 +299,21 @@ export default function StreamDetail({
             setLoading(false);
         }
     };
+
+    const handleAddSource = async () => {
+        if (!sourceAccountPublicKey || !sourceName) return;
+        setSourceLoading(true); setError("");
+        try {
+            const res = await fetch(withAccountScope(`${apiBase}/api/v1/streams/${encodeURIComponent(streamName)}/sources`), {
+                method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ sourceAccountPublicKey, sourceName }),
+            });
+            if (!res.ok) { const data = (await res.json().catch(() => ({}))) as { error?: string }; setError(data.error ?? "Failed to add stream source."); return; }
+            const streamRes = await fetch(withAccountScope(`${apiBase}/api/v1/streams/${encodeURIComponent(streamName)}`), { headers: { Authorization: `Bearer ${token}` } });
+            if (streamRes.ok) { const data = (await streamRes.json()) as StreamDetailType; setStream({ ...data, subjects: data.subjects ?? [] }); }
+        } finally { setSourceLoading(false); }
+    };
+
 
     return (
         <section className="panel">
@@ -342,6 +389,41 @@ export default function StreamDetail({
                         </button>
                     </div>
                 </div>
+
+                <div>
+                    <strong>Source Streams:</strong>
+                    {sourceNames.length === 0 ? (
+                        <span
+                            className="muted"
+                            style={{ marginLeft: "0.5rem", fontSize: "0.85em" }}
+                        >
+                            none
+                        </span>
+                    ) : (
+                        <ul className="list">
+                            {sourceNames.map((name, index) => (
+                                <li key={`${name}-${index}`} className="list-row">
+                                    <code>{name}</code>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+
+                {consumers.length === 0 && (
+                    <div className="stack">
+                        <strong>{sourceNames.length === 0 ? "Add Source" : "Add Another Source"}</strong>
+                        <select value={sourceAccountPublicKey} onChange={(e) => setSourceAccountPublicKey(e.target.value)}>
+                            <option value="">Select source account…</option>
+                            {sourceAccounts.map((account) => <option key={account.publicKey} value={account.publicKey}>{account.name}</option>)}
+                        </select>
+                        <select value={sourceName} onChange={(e) => setSourceName(e.target.value)} disabled={!sourceAccountPublicKey}>
+                            <option value="">Select source stream…</option>
+                            {sourceStreams.filter((name) => !(sourceAccountPublicKey === accountPublicKey && name === streamName)).map((name) => <option key={name} value={name}>{name}</option>)}
+                        </select>
+                        <button type="button" disabled={sourceLoading || !sourceName} onClick={handleAddSource}>{sourceLoading ? "Adding…" : "Add Source"}</button>
+                    </div>
+                )}
 
                 {(stream.config || stream.state) && (
                     <div style={{ marginTop: "0.5rem" }}>

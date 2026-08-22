@@ -154,6 +154,95 @@ func (h *Handler) ToggleAccountJetStream(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, map[string]any{"enabled": req.Enabled, "message": "JetStream updated for account"})
 }
 
+func (h *Handler) GrantJetStreamSource(w http.ResponseWriter, r *http.Request) {
+	operator := strings.TrimSpace(r.PathValue("operator"))
+	sourceAccount := strings.TrimSpace(r.PathValue("accountPublicKey"))
+	var req struct {
+		TargetAccountPublicKey string `json:"targetAccountPublicKey"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	targetAccount := strings.TrimSpace(req.TargetAccountPublicKey)
+	if operator == "" || sourceAccount == "" || targetAccount == "" {
+		writeError(w, http.StatusBadRequest, "source and target accounts are required")
+		return
+	}
+	if _, ok := h.repo.FindByPublicKey(operator, sourceAccount); !ok {
+		writeError(w, http.StatusNotFound, "source account not found")
+		return
+	}
+	if err := h.service.GrantJetStreamSource(sourceAccount, targetAccount); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"message": "JetStream source access granted"})
+}
+
+func (h *Handler) ToggleJetStreamSource(w http.ResponseWriter, r *http.Request) {
+	operator := strings.TrimSpace(r.PathValue("operator"))
+	accountPublicKey := strings.TrimSpace(r.PathValue("accountPublicKey"))
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := h.service.ToggleJetStreamSource(accountPublicKey, req.Enabled); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	h.repo.UpdateSourceEnabled(operator, accountPublicKey, req.Enabled)
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": req.Enabled})
+}
+
+func (h *Handler) ListJetStreamSourceAccounts(w http.ResponseWriter, r *http.Request) {
+	targetAccount := strings.TrimSpace(r.URL.Query().Get("accountPublicKey"))
+	if targetAccount == "" {
+		writeError(w, http.StatusBadRequest, "accountPublicKey query parameter is required")
+		return
+	}
+	available := []Record{}
+	for _, candidate := range h.repo.ListAccounts() {
+		if !candidate.JSEnabled || !candidate.SourceEnabled {
+			continue
+		}
+		if candidate.PublicKey == targetAccount {
+			available = append(available, candidate)
+			continue
+		}
+		claims, err := h.service.LookupAccountClaims(candidate.PublicKey)
+		if err != nil {
+			continue
+		}
+		for _, granted := range SourceExportTargets(claims) {
+			if granted == targetAccount {
+				available = append(available, candidate)
+				break
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"accounts": available})
+}
+
+func (h *Handler) ListJetStreamSourceImports(w http.ResponseWriter, r *http.Request) {
+	targetAccount := strings.TrimSpace(r.PathValue("accountPublicKey"))
+	claims, err := h.service.LookupAccountClaims(targetAccount)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "account not found")
+		return
+	}
+	sources := []Record{}
+	for _, sourceKey := range SourceImportAccounts(claims) {
+		if source, ok := h.repo.FindAnyByPublicKey(sourceKey); ok {
+			sources = append(sources, source)
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sources": sources})
+}
+
 func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	operator := strings.TrimSpace(r.PathValue("operator"))
 	accountPublicKey := strings.TrimSpace(r.PathValue("accountPublicKey"))

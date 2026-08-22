@@ -234,6 +234,70 @@ button:disabled {
     background: rgba(255, 255, 255, 0.02);
 }
 
+.account-card {
+    padding: 14px 16px !important;
+}
+
+.account-card__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.account-card__identity {
+    min-width: 0;
+}
+
+.account-card__name {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-weight: 700;
+}
+
+.account-card__key {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.72em;
+    overflow-wrap: anywhere;
+}
+
+.account-card__actions,
+.account-card__form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.account-card__actions button {
+    font-size: 0.82em;
+    padding: 6px 9px;
+}
+
+.account-card__section {
+    margin-top: 12px;
+    border-top: 1px solid var(--line);
+    padding-top: 10px;
+}
+
+.account-card__section > summary {
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.account-card__section-body {
+    margin-top: 10px;
+}
+
+.account-card__hint {
+    margin: 4px 0 0;
+    font-size: 0.85em;
+}
+
 .list-row {
     border-color: #f18f55;
     background: rgba(241, 143, 85, 0.14);

@@ -2,13 +2,14 @@ import { useState } from "react";
 import UserList from "./UserList";
 import type { Account } from "../../types";
 import {
-    accountHasJSConsumerApiAccess,
     isJSConsumerApiPublishSubject,
     isJSConsumerApiSubscribeSubject,
 } from "../../constants/jsApi";
 
 type Props = {
     accounts: Account[];
+    sourceCandidateAccounts: Account[];
+    sourceImports: Account[];
     canDeleteAccounts: boolean;
     onDeleteAccount: (
         operator: string,
@@ -90,10 +91,18 @@ type Props = {
         operator: string,
         name: string,
     ) => Promise<void>;
+    onGrantJetStreamSource: (
+        operator: string,
+        sourceAccountPublicKey: string,
+        targetAccountPublicKey: string,
+    ) => Promise<void>;
+    onToggleJetStreamSource: (operator: string, accountPublicKey: string, enabled: boolean) => Promise<void>;
 };
 
 export default function AccountList({
     accounts,
+    sourceCandidateAccounts,
+    sourceImports,
     canDeleteAccounts,
     onDeleteAccount,
     onAddPublishAllow,
@@ -110,7 +119,8 @@ export default function AccountList({
     onGetAccountJWT,
     onToggleJetStream,
     onGrantJSConsumerApiAccess,
-    onRevokeJSConsumerApiAccess,
+    onGrantJetStreamSource,
+    onToggleJetStreamSource,
 }: Props) {
     const [subjectInputs, setSubjectInputs] = useState<Record<string, string>>(
         {},
@@ -127,7 +137,7 @@ export default function AccountList({
     } | null>(null);
     const [jwtLoading, setJwtLoading] = useState<string | null>(null);
     const [jsToggleLoading, setJsToggleLoading] = useState<string | null>(null);
-    const [jsApiLoading, setJsApiLoading] = useState<string | null>(null);
+    const [sourceTargets, setSourceTargets] = useState<Record<string, string>>({});
 
     const key = (acc: Account) => `${acc.operator}/${acc.publicKey}`;
 
@@ -164,27 +174,51 @@ export default function AccountList({
                     );
 
                     return (
-                        <li key={key(acc)}>
-                            <div
-                                style={{
-                                    display: "flex",
-                                    alignItems: "center",
-                                    gap: "0.5rem",
-                                }}
-                            >
-                                <span style={{ fontWeight: 600 }}>
-                                    {acc.name}
-                                </span>
-                                {acc.jsEnabled && (
-                                    <span className="badge ok">JS</span>
-                                )}
-                                <span className="muted"> — {acc.operator}</span>
-                                <code
-                                    className="muted"
-                                    style={{ fontSize: "0.75em" }}
+                        <li key={key(acc)} className="account-card">
+                            <div className="account-card__header">
+                                <div className="account-card__identity">
+                                    <div className="account-card__name">
+                                        <span>{acc.name}</span>
+                                        {acc.jsEnabled && (
+                                            <span className="badge ok">JetStream</span>
+                                        )}
+                                        {acc.sourceEnabled && (
+                                            <span className="badge">Source enabled</span>
+                                        )}
+                                        <span className="muted">{acc.operator}</span>
+                                    </div>
+                                    <code className="muted account-card__key">
+                                        {acc.publicKey}
+                                    </code>
+                                </div>
+                                <div className="account-card__actions">
+                                <button
+                                    type="button"
+                                    disabled={jsToggleLoading === key(acc)}
+                                    onClick={async () => {
+                                        setJsToggleLoading(key(acc));
+                                        try {
+                                            if (acc.jsEnabled) {
+                                                await onToggleJetStream(acc.operator, acc.publicKey, false);
+                                            } else {
+                                                await onToggleJetStream(acc.operator, acc.publicKey, true);
+                                                await onGrantJSConsumerApiAccess(acc.operator, acc.name);
+                                            }
+                                        } finally {
+                                            setJsToggleLoading(null);
+                                        }
+                                    }}
+                                    style={{
+                                        fontSize: "0.75em",
+                                        padding: "0 0.3rem",
+                                    }}
                                 >
-                                    {acc.publicKey}
-                                </code>
+                                    {jsToggleLoading === key(acc)
+                                        ? "…"
+                                        : acc.jsEnabled
+                                          ? "Disable JS"
+                                          : "Enable JS & Grant API"}
+                                </button>
                                 <button
                                     type="button"
                                     disabled={jwtLoading === key(acc)}
@@ -203,75 +237,8 @@ export default function AccountList({
                                             setJwtLoading(null);
                                         }
                                     }}
-                                    style={{
-                                        marginLeft: "auto",
-                                        fontSize: "0.75em",
-                                        padding: "0 0.3rem",
-                                    }}
                                 >
-                                    {jwtLoading === key(acc) ? "…" : "View JWT"}
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={jsToggleLoading === key(acc)}
-                                    onClick={async () => {
-                                        setJsToggleLoading(key(acc));
-                                        try {
-                                            await onToggleJetStream(
-                                                acc.operator,
-                                                acc.publicKey,
-                                                !acc.jsEnabled,
-                                            );
-                                        } finally {
-                                            setJsToggleLoading(null);
-                                        }
-                                    }}
-                                    style={{
-                                        fontSize: "0.75em",
-                                        padding: "0 0.3rem",
-                                    }}
-                                >
-                                    {jsToggleLoading === key(acc)
-                                        ? "…"
-                                        : acc.jsEnabled
-                                          ? "Disable JS"
-                                          : "Enable JS"}
-                                </button>
-                                <button
-                                    type="button"
-                                    disabled={jsApiLoading === key(acc)}
-                                    onClick={async () => {
-                                        setJsApiLoading(key(acc));
-                                        try {
-                                            if (
-                                                accountHasJSConsumerApiAccess(
-                                                    acc,
-                                                )
-                                            ) {
-                                                await onRevokeJSConsumerApiAccess(
-                                                    acc.operator,
-                                                    acc.name,
-                                                );
-                                            } else {
-                                                await onGrantJSConsumerApiAccess(
-                                                    acc.operator,
-                                                    acc.name,
-                                                );
-                                            }
-                                        } finally {
-                                            setJsApiLoading(null);
-                                        }
-                                    }}
-                                    style={{
-                                        fontSize: "0.75em",
-                                        padding: "0 0.3rem",
-                                    }}
-                                >
-                                    {jsApiLoading === key(acc)
-                                        ? "…"
-                                        : accountHasJSConsumerApiAccess(acc)
-                                          ? "Revoke JS API"
-                                          : "Grant JS API"}
+                                    {jwtLoading === key(acc) ? "Loading…" : "View JWT"}
                                 </button>
                                 <button
                                     type="button"
@@ -285,7 +252,68 @@ export default function AccountList({
                                     Delete
                                 </button>
                             </div>
-                            <div style={{ marginTop: "0.4rem" }}>
+                            </div>
+                            <details className="account-card__section">
+                                <summary>
+                                    Source sharing{sourceImports.length > 0 ? ` (${sourceImports.length} configured)` : ""}
+                                </summary>
+                                <div className="account-card__section-body stack">
+                                    {!acc.jsEnabled ? (
+                                        <p className="muted account-card__hint">
+                                            Enable JetStream to configure stream sources.
+                                        </p>
+                                    ) : (
+                                        <>
+                                            <div className="account-card__actions">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => onToggleJetStreamSource(acc.operator, acc.publicKey, !acc.sourceEnabled)}
+                                                >
+                                                    {acc.sourceEnabled ? "Disable sharing" : "Allow as source"}
+                                                </button>
+                                                <span className="muted account-card__hint">
+                                                    Lets other accounts import this account's streams.
+                                                </span>
+                                            </div>
+                                            <div className="account-card__form">
+                                                <select
+                                                    value={sourceTargets[key(acc)] ?? ""}
+                                                    onChange={(e) => setSourceTargets((prev) => ({ ...prev, [key(acc)]: e.target.value }))}
+                                                >
+                                                    <option value="">Import streams from…</option>
+                                                    {sourceCandidateAccounts
+                                                        .filter((source) => source.jsEnabled && source.sourceEnabled && source.publicKey !== acc.publicKey)
+                                                        .map((source) => (
+                                                            <option key={source.publicKey} value={source.publicKey}>{source.name}</option>
+                                                        ))}
+                                                </select>
+                                                <button
+                                                    type="button"
+                                                    disabled={!sourceTargets[key(acc)]}
+                                                    onClick={() => onGrantJetStreamSource(acc.operator, sourceTargets[key(acc)], acc.publicKey)}
+                                                >
+                                                    Add source account
+                                                </button>
+                                            </div>
+                                            {sourceImports.length > 0 ? (
+                                                <p className="account-card__hint">
+                                                    <strong>Available sources:</strong>{" "}
+                                                    {sourceImports.map((source) => source.name).join(", ")}
+                                                </p>
+                                            ) : (
+                                                <p className="muted account-card__hint">
+                                                    No source account is configured.
+                                                </p>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </details>
+                            <details className="account-card__section">
+                                <summary>
+                                    Publish permissions ({visiblePublishAllow.length})
+                                </summary>
+                                <div className="account-card__section-body">
                                 <strong style={{ fontSize: "0.85em" }}>
                                     Publish allow:
                                 </strong>
@@ -363,8 +391,13 @@ export default function AccountList({
                                         Add
                                     </button>
                                 </div>
-                            </div>
-                            <div style={{ marginTop: "0.4rem" }}>
+                                </div>
+                            </details>
+                            <details className="account-card__section">
+                                <summary>
+                                    Subscribe permissions ({visibleSubscribeAllow.length})
+                                </summary>
+                                <div className="account-card__section-body">
                                 <strong style={{ fontSize: "0.85em" }}>
                                     Subscribe allow:
                                 </strong>
@@ -442,7 +475,11 @@ export default function AccountList({
                                         Add
                                     </button>
                                 </div>
-                            </div>
+                                </div>
+                            </details>
+                            <details className="account-card__section">
+                                <summary>Users ({acc.users.length})</summary>
+                                <div className="account-card__section-body">
                             <UserList
                                 accountKey={key(acc)}
                                 users={acc.users}
@@ -500,6 +537,8 @@ export default function AccountList({
                                     )
                                 }
                             />
+                                </div>
+                            </details>
                         </li>
                     );
                 })}

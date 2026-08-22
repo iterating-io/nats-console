@@ -18,6 +18,7 @@ type Record struct {
 	PublicKey      string   `json:"publicKey"`
 	IsSystem       bool     `json:"isSystem"`
 	JSEnabled      bool     `json:"jsEnabled"`
+	SourceEnabled  bool     `json:"sourceEnabled"`
 }
 
 type Capabilities struct {
@@ -136,6 +137,17 @@ func (r *Repository) UpdateJetStream(operator, publicKey string, enabled bool) {
 	for i, acc := range r.accounts {
 		if acc.Operator == operator && acc.PublicKey == publicKey {
 			r.accounts[i].JSEnabled = enabled
+			return
+		}
+	}
+}
+
+func (r *Repository) UpdateSourceEnabled(operator, publicKey string, enabled bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.accounts {
+		if r.accounts[i].Operator == operator && r.accounts[i].PublicKey == publicKey {
+			r.accounts[i].SourceEnabled = enabled
 			return
 		}
 	}

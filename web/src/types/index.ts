@@ -17,5 +17,6 @@ export type Account = {
     subscribeAllow: string[];
     users: User[];
     jsEnabled: boolean;
+    sourceEnabled?: boolean;
     isSystem?: boolean;
 };

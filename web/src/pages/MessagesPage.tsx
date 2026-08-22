@@ -14,9 +14,16 @@ export default function MessagesPage() {
     const [streams, setStreams] = useState<Stream[]>([]);
     const [selectedAccountPublicKey, setSelectedAccountPublicKey] =
         useState("");
+    const [selectedPublishAccountPublicKey, setSelectedPublishAccountPublicKey] =
+        useState("");
     const [selectedStream, setSelectedStream] = useState("");
     const [error, setError] = useState("");
     const [message, setMessage] = useState<any>(null);
+    const [publishSubject, setPublishSubject] = useState("");
+    const [publishMessage, setPublishMessage] = useState("");
+    const [publishLoading, setPublishLoading] = useState(false);
+    const [publishInfo, setPublishInfo] = useState("");
+    const [showPublishAllow, setShowPublishAllow] = useState(false);
     const lastSeqRef = useRef<number>(0);
 
     const buildStreamsURL = () => {
@@ -57,6 +64,15 @@ export default function MessagesPage() {
                 nextAccounts.find((acc) => !acc.isSystem && acc.jsEnabled) ??
                 nextAccounts.find((acc) => !acc.isSystem);
             return firstAvailable?.publicKey ?? "";
+        });
+        setSelectedPublishAccountPublicKey((prev) => {
+            if (prev && nextAccounts.some((acc) => acc.publicKey === prev)) {
+                return prev;
+            }
+            return (
+                nextAccounts.find((acc) => !acc.isSystem && acc.jsEnabled)
+                    ?.publicKey ?? ""
+            );
         });
     };
 
@@ -234,6 +250,45 @@ export default function MessagesPage() {
         navigate,
     ]);
 
+    const handlePublish = async () => {
+        if (!selectedPublishAccountPublicKey || !publishSubject.trim()) return;
+        setPublishLoading(true);
+        setPublishInfo("");
+        setError("");
+        try {
+            const res = await fetch(
+                `${apiBase}/api/v1/messages?accountPublicKey=${encodeURIComponent(selectedPublishAccountPublicKey)}`,
+                {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        subject: publishSubject,
+                        message: publishMessage,
+                    }),
+                },
+            );
+            if (!res.ok) {
+                const data = (await res.json().catch(() => ({}))) as {
+                    error?: string;
+                };
+                setError(data.error ?? "Failed to publish message.");
+                return;
+            }
+            const data = (await res.json()) as { sequence: number };
+            setPublishInfo(`Message sent (sequence ${data.sequence}).`);
+            setPublishMessage("");
+        } finally {
+            setPublishLoading(false);
+        }
+    };
+
+    const selectedPublishAccount = accounts.find(
+        (account) => account.publicKey === selectedPublishAccountPublicKey,
+    );
+
     return (
         <div className="page-stack">
             <h2>Messages</h2>
@@ -320,6 +375,83 @@ export default function MessagesPage() {
                     </div>
                 </section>
                 <section className="panel">
+                    <div className="stack" style={{ marginBottom: "1rem" }}>
+                        <h3>Send Message</h3>
+                        <label style={{ fontSize: "0.9rem", fontWeight: 600 }}>
+                            Sending account
+                        </label>
+                        <select
+                            value={selectedPublishAccountPublicKey}
+                            onChange={(e) => {
+                                setSelectedPublishAccountPublicKey(e.target.value);
+                                setPublishInfo("");
+                                setShowPublishAllow(false);
+                            }}
+                            className="select-input"
+                        >
+                            <option value="">Select sending account…</option>
+                            {accounts
+                                .filter((account) => !account.isSystem)
+                                .map((account) => (
+                                    <option
+                                        key={account.publicKey}
+                                        value={account.publicKey}
+                                    >
+                                        {account.name} ({account.operator})
+                                        {account.jsEnabled ? "" : " - JS Disabled"}
+                                    </option>
+                                ))}
+                        </select>
+                        {selectedPublishAccount && (
+                            <div>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPublishAllow((shown) => !shown)}
+                                    aria-expanded={showPublishAllow}
+                                    style={{ fontSize: "0.85rem" }}
+                                >
+                                    {showPublishAllow ? "Hide" : "Show"} Publish Allow
+                                </button>
+                                {showPublishAllow && (
+                                    selectedPublishAccount.publishAllow.length === 0 ? (
+                                        <p className="muted">All subjects are allowed.</p>
+                                    ) : (
+                                        <ul className="list" style={{ marginTop: "0.25rem" }}>
+                                            {selectedPublishAccount.publishAllow.map((subject) => (
+                                                <li key={subject} className="list-row"><code>{subject}</code></li>
+                                            ))}
+                                        </ul>
+                                    )
+                                )}
+                            </div>
+                        )}
+                        <input
+                            value={publishSubject}
+                            onChange={(e) => setPublishSubject(e.target.value)}
+                            placeholder="Subject"
+                            disabled={!selectedPublishAccountPublicKey}
+                        />
+                        <textarea
+                            value={publishMessage}
+                            onChange={(e) => setPublishMessage(e.target.value)}
+                            placeholder="Message"
+                            rows={3}
+                            disabled={!selectedPublishAccountPublicKey}
+                        />
+                        <button
+                            type="button"
+                            disabled={
+                                publishLoading ||
+                                !selectedPublishAccountPublicKey ||
+                                !selectedPublishAccount?.jsEnabled ||
+                                !publishSubject.trim()
+                            }
+                            onClick={handlePublish}
+                        >
+                            {publishLoading ? "Sending…" : "Send Message"}
+                        </button>
+                        {publishInfo && <p className="info">{publishInfo}</p>}
+                    </div>
                     <h3>Latest Message</h3>
                     {selectedStream && (
                         <div

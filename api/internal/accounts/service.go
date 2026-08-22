@@ -93,6 +93,7 @@ func (s *Service) LoadFromNATS() {
 			PublicKey:      claims.Subject,
 			IsSystem:       strings.EqualFold(claims.Subject, systemAccount),
 			JSEnabled:      claims.Account.Limits.IsJSEnabled(),
+			SourceEnabled:  claims.Account.Tags.Contains(sourceEnabledTag),
 		})
 	}
 
@@ -153,6 +154,25 @@ func (s *Service) ToggleAccountJetStream(accountPublicKey string, enabled bool) 
 		return fmt.Errorf("invalid OPERATOR_NKEY: %w", err)
 	}
 	_, err = s.PushAccountClaimsToNATS(claims, opKP)
+	return err
+}
+
+func (s *Service) ToggleJetStreamSource(accountPublicKey string, enabled bool) error {
+	claims, err := s.LookupAccountClaims(accountPublicKey)
+	if err != nil {
+		return err
+	}
+	if enabled {
+		claims.Account.Tags.Add(sourceEnabledTag)
+	} else {
+		claims.Account.Tags.Remove(sourceEnabledTag)
+	}
+	claims.IssuedAt = time.Now().Unix()
+	op, err := nkeys.FromSeed([]byte(s.cfg.OperatorNKey))
+	if err != nil {
+		return err
+	}
+	_, err = s.PushAccountClaimsToNATS(claims, op)
 	return err
 }
 

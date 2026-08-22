@@ -22,6 +22,48 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
+func streamSources(names []string, streamName string) ([]*nats.StreamSource, error) {
+	seen := make(map[string]struct{}, len(names))
+	sources := make([]*nats.StreamSource, 0, len(names))
+	for _, name := range names {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if name == streamName {
+			return nil, errors.New("a stream cannot be its own source")
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		sources = append(sources, &nats.StreamSource{Name: name})
+	}
+	return sources, nil
+}
+
+// appendStreamSource changes only the Sources field of an existing stream
+// configuration. All other stream settings remain intact when the config is
+// sent back to JetStream.
+func appendStreamSource(sources []*nats.StreamSource, source *nats.StreamSource) ([]*nats.StreamSource, error) {
+	for _, existing := range sources {
+		if sameStreamSource(existing, source) {
+			return nil, errors.New("stream source is already configured")
+		}
+	}
+	return append(sources, source), nil
+}
+
+func sameStreamSource(a, b *nats.StreamSource) bool {
+	if a == nil || b == nil || a.Name != b.Name {
+		return false
+	}
+	if a.External == nil || b.External == nil {
+		return a.External == nil && b.External == nil
+	}
+	return a.External.APIPrefix == b.External.APIPrefix && a.External.DeliverPrefix == b.External.DeliverPrefix
+}
+
 func (h *Handler) jetStreamForRequest(w http.ResponseWriter, r *http.Request) (nats.JetStreamContext, func(), bool) {
 	accountPublicKey := strings.TrimSpace(r.URL.Query().Get("accountPublicKey"))
 	if accountPublicKey == "" {
@@ -111,6 +153,17 @@ func (h *Handler) getOrCreateAccountConn(operator, accountPublicKey, signingKeyS
 	cg.ephemeral = nc
 	h.accountConns[accountPublicKey] = cg
 	return nc, nil
+}
+
+func (h *Handler) resetEphemeralAccountConn(accountPublicKey string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	cg := h.accountConns[accountPublicKey]
+	if cg == nil || cg.ephemeral == nil {
+		return
+	}
+	cg.ephemeral.Close()
+	cg.ephemeral = nil
 }
 
 // getOrCreateAccountConnAsUser attempts to connect to NATS as a stored user

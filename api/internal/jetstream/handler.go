@@ -84,6 +84,7 @@ func (h *Handler) CreateStream(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name     string   `json:"name"`
 		Subjects []string `json:"subjects"`
+		Sources  []string `json:"sources"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -92,6 +93,11 @@ func (h *Handler) CreateStream(w http.ResponseWriter, r *http.Request) {
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
 		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	sources, err := streamSources(req.Sources, req.Name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	js, cleanup, ok := h.jetStreamForRequest(w, r)
@@ -105,7 +111,8 @@ func (h *Handler) CreateStream(w http.ResponseWriter, r *http.Request) {
 	} else {
 		cfg.Subjects = []string{req.Name + ".>"}
 	}
-	_, err := js.AddStream(cfg)
+	cfg.Sources = sources
+	_, err = js.AddStream(cfg)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -148,6 +155,116 @@ func (h *Handler) UpdateStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"name": name, "subjects": req.Subjects})
+}
+
+func (h *Handler) AddStreamSource(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.PathValue("name"))
+	var req struct {
+		SourceAccountPublicKey string `json:"sourceAccountPublicKey"`
+		SourceName             string `json:"sourceName"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.SourceAccountPublicKey = strings.TrimSpace(req.SourceAccountPublicKey)
+	req.SourceName = strings.TrimSpace(req.SourceName)
+	if name == "" || req.SourceAccountPublicKey == "" || req.SourceName == "" {
+		writeError(w, http.StatusBadRequest, "stream and source are required")
+		return
+	}
+	targetAccount := strings.TrimSpace(r.URL.Query().Get("accountPublicKey"))
+	if targetAccount == "" {
+		writeError(w, http.StatusBadRequest, "accountPublicKey query parameter is required")
+		return
+	}
+	if name == req.SourceName && targetAccount == req.SourceAccountPublicKey {
+		writeError(w, http.StatusBadRequest, "a stream cannot be its own source")
+		return
+	}
+	js, cleanup, ok := h.jetStreamForRequest(w, r)
+	if !ok {
+		return
+	}
+	defer cleanup()
+	info, err := js.StreamInfo(name)
+	if err != nil {
+		writeJetStreamError(w, err, "stream not found")
+		return
+	}
+	if info.State.Consumers > 0 {
+		writeError(w, http.StatusConflict, "cannot add a source after consumers exist")
+		return
+	}
+	source := &nats.StreamSource{Name: req.SourceName}
+	if req.SourceAccountPublicKey != targetAccount {
+		claims, err := h.accountsSvc.LookupAccountClaims(req.SourceAccountPublicKey)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "source account is unavailable")
+			return
+		}
+		allowed := false
+		for _, account := range accounts.SourceExportTargets(claims) {
+			if account == targetAccount {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			writeError(w, http.StatusForbidden, "source account has not granted access to this account")
+			return
+		}
+		source.External = &nats.ExternalStream{APIPrefix: "$JS.SOURCE." + req.SourceAccountPublicKey + ".API", DeliverPrefix: "$JS.SOURCE." + targetAccount}
+	}
+	sources, err := appendStreamSource(info.Config.Sources, source)
+	if err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	info.Config.Sources = sources
+	if _, err = js.UpdateStream(&info.Config); err != nil {
+		writeJetStreamError(w, err, "failed to add stream source")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"source": source})
+}
+
+func (h *Handler) PublishMessage(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Subject string `json:"subject"`
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	req.Subject = strings.TrimSpace(req.Subject)
+	if req.Subject == "" {
+		writeError(w, http.StatusBadRequest, "subject is required")
+		return
+	}
+	accountPublicKey := strings.TrimSpace(r.URL.Query().Get("accountPublicKey"))
+	if account, ok := h.repo.FindAnyByPublicKey(accountPublicKey); ok &&
+		len(account.PublishAllow) > 0 &&
+		!accounts.SubjectAllowed(req.Subject, account.PublishAllow) {
+		writeError(w, http.StatusForbidden, "subject is not allowed for this account")
+		return
+	}
+	// Account permission changes are applied through a new account JWT. Drop the
+	// cached ephemeral connection so this publish authenticates with current
+	// account permissions rather than credentials issued before the update.
+	h.resetEphemeralAccountConn(accountPublicKey)
+	js, cleanup, ok := h.jetStreamForRequest(w, r)
+	if !ok {
+		return
+	}
+	defer cleanup()
+	ack, err := js.Publish(req.Subject, []byte(req.Message))
+	if err != nil {
+		writeJetStreamError(w, err, "failed to publish message")
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"stream": ack.Stream, "sequence": ack.Sequence})
 }
 
 func (h *Handler) DeleteStream(w http.ResponseWriter, r *http.Request) {
