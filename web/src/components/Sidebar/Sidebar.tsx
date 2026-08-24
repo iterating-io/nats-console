@@ -22,6 +22,10 @@ const NAV: NavGroup[] = [
             { label: "Messages", path: "/dashboard/messages" },
         ],
     },
+    {
+        group: "Integration",
+        items: [{ label: "AsyncAPI", path: "/dashboard/asyncapi" }],
+    },
 ];
 
 export default function Sidebar() {

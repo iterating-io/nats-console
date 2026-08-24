@@ -6,6 +6,7 @@ Console connects to a running NATS server and provides UI for:
 
 - Account and user management
 - JetStream stream and consumer management
+- Central AsyncAPI checker account with read-only cross-account Stream Info imports
 - User credentials export (Copy or Download)
 - On-demand publish testing
 
@@ -25,6 +26,7 @@ NATS server must be configured with:
 - Account creation auto-provisions a `stream-reader` user with stream-info/message-read only permissions
 - User credentials export and creds file download
 - JetStream stream and consumer CRUD
+- AsyncAPI menu provisions one `asyncapi-checker` account and selectively imports service-account Stream Info APIs
 - Dashboard publish test and live heartbeat
 - Role-based access: admin, operator, viewer
 
@@ -90,6 +92,7 @@ Access the console at `https://console.example.com` or `http://localhost:9222`.
 4. Create JetStream streams and consumers
 5. Export user credentials from UI (Copy or Download)
 6. Test publish operations in Dashboard
+7. Use AsyncAPI to create the checker account and enable Stream Info imports for the service accounts to inspect
 
 ## Account Deletion
 

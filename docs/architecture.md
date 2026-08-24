@@ -52,6 +52,13 @@ The API connects to NATS using a dynamically generated user credential:
 - `POST /api/v1/publish`: publish a test message (role-based, admin/operator only)
 - `POST /api/v1/publish/as-user`: publish as a specific user with subject permission check
 
+### AsyncAPI checker
+
+- The console manages one `asyncapi-checker` account for its single operator.
+- The AsyncAPI page can create the account and selectively import each JetStream-enabled service account's `$JS.API.STREAM.INFO.>` subject as a private NATS service import.
+- Each import is given a local alias, `checker.<service-account>.$JS.API.STREAM.INFO.>`, and is protected with an activation token signed by the service account.
+- The checker user is restricted to publishing to enabled aliases and subscribing to `_INBOX.>` for request/reply responses. It has no event-subject or stream/consumer mutation permission.
+
 ## Operator / Account / User Management
 
 ### Data Model
@@ -83,6 +90,8 @@ The API connects to NATS using a dynamically generated user credential:
 | GET/POST    | `/api/v1/accounts/{operator}/{accountPublicKey}/users`                      | List / create users for the account identified by public key (SQLite persisted)                                   |
 | DELETE      | `/api/v1/accounts/{operator}/{accountPublicKey}/users/{user}`               | Delete user (SQLite persisted)                                                                                    |
 | GET         | `/api/v1/accounts/{operator}/{accountPublicKey}/users/{user}/creds`         | Export decorated NATS `.creds` payload for a persisted user                                                       |
+| GET/POST    | `/api/v1/asyncapi`                                                          | Read AsyncAPI checker status / create the default checker account                                                  |
+| POST        | `/api/v1/asyncapi/imports/{accountPublicKey}`                               | Enable or remove that account's read-only Stream Info API import (`{"enabled": true|false}`)                    |
 | POST/DELETE | `/api/v1/accounts/{operator}/{accountPublicKey}/users/{user}/publish-allow` | Add / remove user publish subjects (SQLite persisted)                                                             |     | POST | `/api/v1/accounts/{operator}/{accountPublicKey}/jetstream` | Enable or disable JetStream for an account (`{"enabled": true/false}`) |     | GET | `/api/v1/users` | List all users across all accounts (SQLite) |
 | POST        | `/api/v1/publish/as-user`                                                   | Publish as a specific user with subject permission check                                                          |
 

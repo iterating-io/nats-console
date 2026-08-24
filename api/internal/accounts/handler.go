@@ -146,6 +146,14 @@ func (h *Handler) ToggleAccountJetStream(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
+	if !req.Enabled && !strings.EqualFold(accountPublicKey, h.asyncAPICheckerKey()) {
+		if _, exists := h.repo.FindByName(singleOperator(h.repo), asyncAPICheckerAccountName); exists {
+			if err := h.service.SetAsyncAPIStreamInfoImport(accountPublicKey, false); err != nil {
+				writeError(w, http.StatusBadRequest, "failed to remove AsyncAPI import: "+err.Error())
+				return
+			}
+		}
+	}
 	if err := h.service.ToggleAccountJetStream(accountPublicKey, req.Enabled); err != nil {
 		writeError(w, http.StatusNotFound, "account JWT not found")
 		return
@@ -253,6 +261,12 @@ func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "account not found")
 		return
 	}
+	if _, exists := h.repo.FindByName(singleOperator(h.repo), asyncAPICheckerAccountName); exists && !strings.EqualFold(accountPublicKey, h.asyncAPICheckerKey()) {
+		if err := h.service.SetAsyncAPIStreamInfoImport(accountPublicKey, false); err != nil {
+			writeError(w, http.StatusBadRequest, "failed to remove AsyncAPI import: "+err.Error())
+			return
+		}
+	}
 	if err := h.service.DeleteAccountInNATS(accountPublicKey); err != nil {
 		log.Printf("deleteAccount: failed for %s/%s: %v", operator, accountPublicKey, err)
 		writeError(w, http.StatusBadGateway, "failed to delete account in nats")
@@ -263,6 +277,11 @@ func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		log.Printf("deleteAccount: local cleanup failed for %s/%s: %v", operator, accountPublicKey, err)
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) asyncAPICheckerKey() string {
+	checker, _ := h.repo.FindByName(singleOperator(h.repo), asyncAPICheckerAccountName)
+	return checker.PublicKey
 }
 
 func (h *Handler) AddPublishAllow(w http.ResponseWriter, r *http.Request) {
