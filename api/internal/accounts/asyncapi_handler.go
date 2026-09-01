@@ -29,6 +29,24 @@ func (h *Handler) EnsureAsyncAPI(w http.ResponseWriter, _ *http.Request) {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
+		if err := h.service.EnsureAsyncAPICheckerStatusAccess(checker); err != nil {
+			writeError(w, http.StatusBadGateway, "failed to configure checker status access: "+err.Error())
+			return
+		}
+		imports, err := h.service.AsyncAPIImports()
+		if err != nil {
+			writeError(w, http.StatusBadGateway, "failed to read checker imports: "+err.Error())
+			return
+		}
+		for _, item := range imports {
+			if !item.Imported {
+				continue
+			}
+			if err := h.service.SetAsyncAPIStreamInfoImport(item.Account.PublicKey, true); err != nil {
+				writeError(w, http.StatusBadGateway, "failed to update checker service access: "+err.Error())
+				return
+			}
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"checker": checker, "created": false})
 		return
 	}
@@ -67,6 +85,10 @@ func (h *Handler) EnsureAsyncAPI(w http.ResponseWriter, _ *http.Request) {
 		h.repo.RemoveAccount(operator, pub)
 		_ = h.store.DeleteAccountData(operator, pub)
 		writeError(w, http.StatusBadGateway, "failed to update nats resolver")
+		return
+	}
+	if err := h.service.EnsureAsyncAPICheckerStatusAccess(checker); err != nil {
+		writeError(w, http.StatusBadGateway, "failed to configure checker status access: "+err.Error())
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"checker": checker, "created": true})

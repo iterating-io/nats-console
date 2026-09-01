@@ -2,6 +2,7 @@
 //   - Operator NKey
 //   - System Account NKey + JWT signed by operator
 //   - System User NKey + JWT signed by system account
+//
 // JetStream application accounts are created later by the API at runtime based on JS_ACCOUNT_NAME.
 //
 // Outputs:
@@ -75,6 +76,10 @@ func main() {
 	// Sign system account JWT
 	sysAccountClaims := jwt.NewAccountClaims(sysAccountPub)
 	sysAccountClaims.Name = "SYS"
+	// The console API answers this private request on the system account.  The
+	// checker receives it through a token-required service import created by the
+	// API, never through direct access to the system account.
+	sysAccountClaims.Exports.Add(&jwt.Export{Name: "nats-console-asyncapi-checker-status", Subject: "nats.console.asyncapi.status", Type: jwt.Service, TokenReq: true})
 	sysAccountClaims.IssuedAt = time.Now().Unix()
 	sysAccountJWT, err := sysAccountClaims.Encode(operatorKP)
 	must("encode sys account JWT", err)

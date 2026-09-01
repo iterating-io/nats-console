@@ -60,6 +60,33 @@ func (s *Server) SetNATSConn(nc natsClient) {
 	s.natsConn = nc
 }
 
+// RegisterCheckerStatusService serves the private account-status API exported
+// from the system account. The checker reaches it only through its dedicated
+// service import.
+func (s *Server) RegisterCheckerStatusService(nc *nats.Conn) error {
+	_, err := nc.Subscribe("nats.console.asyncapi.status", func(msg *nats.Msg) {
+		var request struct {
+			Account        string `json:"account"`
+			SourceTarget   string `json:"sourceTarget"`
+			PublishSubject string `json:"publishSubject"`
+		}
+		if err := json.Unmarshal(msg.Data, &request); err != nil {
+			_ = msg.Respond([]byte(`{"error":"invalid status request"}`))
+			return
+		}
+		status, err := s.accountsService.CheckerAccountStatus(request.Account, request.SourceTarget, request.PublishSubject)
+		if err != nil {
+			_ = msg.Respond([]byte(`{"error":"account status unavailable"}`))
+			return
+		}
+		data, err := json.Marshal(status)
+		if err == nil {
+			_ = msg.Respond(data)
+		}
+	})
+	return err
+}
+
 func (s *Server) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")

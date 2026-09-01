@@ -89,7 +89,9 @@ export default function StreamsPage() {
             return;
         }
         const data = (await res.json()) as { accounts: Account[] };
-        const nextAccounts = data.accounts ?? [];
+        const nextAccounts = (data.accounts ?? []).filter(
+            (account) => account.name !== "asyncapi-checker",
+        );
         setAccounts(nextAccounts);
         setSelectedAccountPublicKey((prev) => {
             if (prev && nextAccounts.some((acc) => acc.publicKey === prev)) {

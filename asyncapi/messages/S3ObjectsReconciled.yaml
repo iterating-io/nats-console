@@ -1,0 +1,24 @@
+asyncapi: 3.1.0
+info:
+  title: S3 objects reconciled message
+  version: 1.0.0
+
+components:
+  messages:
+    S3ObjectsReconciled:
+      name: S3ObjectsReconciled
+      title: S3 objects reconciled
+      summary: Confirms that an S3 reconciliation command completed.
+      payload:
+        $ref: '../schemas/S3ObjectsReconciledPayload.yaml#/components/schemas/S3ObjectsReconciledPayload'
+      examples:
+        - name: draftImagesReconciled
+          payload:
+            eventId: c025f8b7-0165-51a9-9cff-7c03695e4ec8
+            sourceEventId: 8b9a4604-1d48-5eb2-8e17-5cfdb6704c1b
+            completedAt: '2026-08-23T12:00:01Z'
+            draftId: 26
+            bucket: dev.blog.iterating.io
+            path: public/draft/26/
+            objects:
+              - 3b50f728-0d96-436e-ab42-033c00e3468d.png

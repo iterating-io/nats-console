@@ -107,6 +107,9 @@ func main() {
 	natsConn := connectNATS()
 	defer natsConn.Close()
 	server.SetNATSConn(natsConn)
+	if err := server.RegisterCheckerStatusService(natsConn); err != nil {
+		log.Fatalf("register checker status service: %v", err)
+	}
 	if natsConn.IsConnected() {
 		log.Printf("NATS connected: %s", natsConn.ConnectedUrl())
 	}

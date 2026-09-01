@@ -572,8 +572,9 @@ export default function AccountList({
                     >
                         <h3 style={{ margin: 0 }}>Delete Account</h3>
                         <p className="muted" style={{ margin: 0 }}>
-                            Delete <strong>{deleteCandidate.name}</strong>{" "}
-                            account and all linked users?
+                            Permanently delete <strong>{deleteCandidate.name}</strong>,
+                            all of its streams and stored messages? Stream Source
+                            connections involving this account will also be removed.
                         </p>
                         <div style={{ display: "flex", gap: "0.5rem" }}>
                             <button

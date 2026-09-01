@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -287,9 +288,10 @@ func (h *Handler) UpdateStreamSource(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) RemoveStreamSourceFilter(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.PathValue("name"))
 	var req struct {
-		SourceAccountPublicKey string `json:"sourceAccountPublicKey"`
-		SourceName             string `json:"sourceName"`
-		FilterSubject          string `json:"filterSubject"`
+		SourceAccountPublicKey string  `json:"sourceAccountPublicKey"`
+		SourceName             string  `json:"sourceName"`
+		FilterSubject          *string `json:"filterSubject"`
+		RemoveAll              bool    `json:"removeAll"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -297,9 +299,16 @@ func (h *Handler) RemoveStreamSourceFilter(w http.ResponseWriter, r *http.Reques
 	}
 	req.SourceAccountPublicKey = strings.TrimSpace(req.SourceAccountPublicKey)
 	req.SourceName = strings.TrimSpace(req.SourceName)
-	req.FilterSubject = strings.TrimSpace(req.FilterSubject)
-	if name == "" || req.SourceAccountPublicKey == "" || req.SourceName == "" || req.FilterSubject == "" {
-		writeError(w, http.StatusBadRequest, "stream, source, and filter are required")
+	filterSubject := ""
+	if req.FilterSubject != nil {
+		filterSubject = strings.TrimSpace(*req.FilterSubject)
+	}
+	if name == "" || req.SourceAccountPublicKey == "" || req.SourceName == "" {
+		writeError(w, http.StatusBadRequest, "stream and source are required")
+		return
+	}
+	if !req.RemoveAll && filterSubject == "" {
+		writeError(w, http.StatusBadRequest, "filter is required unless removeAll is true")
 		return
 	}
 	targetAccount := strings.TrimSpace(r.URL.Query().Get("accountPublicKey"))
@@ -328,14 +337,23 @@ func (h *Handler) RemoveStreamSourceFilter(w http.ResponseWriter, r *http.Reques
 			DeliverPrefix: "$JS.SOURCE." + targetAccount,
 		}
 	}
-	sources, err := removeStreamSourceFilter(info.Config.Sources, source, req.FilterSubject)
+	var sources []*nats.StreamSource
+	if req.RemoveAll {
+		sources, err = removeStreamSource(info.Config.Sources, source)
+	} else {
+		sources, err = removeStreamSourceFilter(info.Config.Sources, source, filterSubject)
+	}
 	if err != nil {
 		writeError(w, http.StatusNotFound, err.Error())
 		return
 	}
 	info.Config.Sources = sources
 	if _, err = js.UpdateStream(&info.Config); err != nil {
-		writeJetStreamError(w, err, "failed to remove stream source filter")
+		message := "failed to remove stream source filter"
+		if req.RemoveAll {
+			message = "failed to remove stream source"
+		}
+		writeJetStreamError(w, err, message)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"sources": sources})
@@ -474,12 +492,71 @@ func (h *Handler) ListConsumers(w http.ResponseWriter, r *http.Request) {
 	type consumerInfo struct {
 		Name          string `json:"name"`
 		FilterSubject string `json:"filterSubject"`
+		DeliverPolicy string `json:"deliverPolicy"`
+		AckPolicy     string `json:"ackPolicy"`
+		AckWait       string `json:"ackWait"`
+		MaxDeliver    int    `json:"maxDeliver"`
+		MaxAckPending int    `json:"maxAckPending"`
+		Type          string `json:"type"`
 	}
 	consumers := []consumerInfo{}
 	for info := range js.ConsumersInfo(stream, nats.Context(ctx)) {
-		consumers = append(consumers, consumerInfo{Name: info.Name, FilterSubject: info.Config.FilterSubject})
+		consumerType := "pull"
+		if info.Config.DeliverSubject != "" {
+			consumerType = "push"
+		}
+		consumers = append(consumers, consumerInfo{
+			Name: info.Name, FilterSubject: info.Config.FilterSubject,
+			DeliverPolicy: consumerDeliverPolicyName(info.Config.DeliverPolicy),
+			AckPolicy:     info.Config.AckPolicy.String(), AckWait: info.Config.AckWait.String(),
+			MaxDeliver: info.Config.MaxDeliver, MaxAckPending: info.Config.MaxAckPending,
+			Type: consumerType,
+		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"consumers": consumers})
+}
+
+func consumerDeliverPolicyName(policy nats.DeliverPolicy) string {
+	switch policy {
+	case nats.DeliverLastPolicy:
+		return "last"
+	case nats.DeliverNewPolicy:
+		return "new"
+	case nats.DeliverByStartSequencePolicy:
+		return "start-sequence"
+	case nats.DeliverByStartTimePolicy:
+		return "start-time"
+	case nats.DeliverLastPerSubjectPolicy:
+		return "last-per-subject"
+	default:
+		return "all"
+	}
+}
+
+func parseConsumerOperationalSettings(ackWaitValue string, maxDeliverValue, maxAckPendingValue int) (time.Duration, int, int, error) {
+	ackWait := 30 * time.Second
+	if value := strings.TrimSpace(ackWaitValue); value != "" {
+		parsed, err := time.ParseDuration(value)
+		if err != nil || parsed <= 0 {
+			return 0, 0, 0, fmt.Errorf("ackWait must be a positive duration")
+		}
+		ackWait = parsed
+	}
+	maxDeliver := maxDeliverValue
+	if maxDeliver == 0 {
+		maxDeliver = -1
+	}
+	if maxDeliver < -1 {
+		return 0, 0, 0, fmt.Errorf("maxDeliver must be -1 or a positive number")
+	}
+	maxAckPending := maxAckPendingValue
+	if maxAckPending == 0 {
+		maxAckPending = 1000
+	}
+	if maxAckPending < 1 {
+		return 0, 0, 0, fmt.Errorf("maxAckPending must be positive")
+	}
+	return ackWait, maxDeliver, maxAckPending, nil
 }
 
 func (h *Handler) CreateConsumer(w http.ResponseWriter, r *http.Request) {
@@ -491,6 +568,10 @@ func (h *Handler) CreateConsumer(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name          string `json:"name"`
 		FilterSubject string `json:"filterSubject"`
+		DeliverPolicy string `json:"deliverPolicy"`
+		AckWait       string `json:"ackWait"`
+		MaxDeliver    int    `json:"maxDeliver"`
+		MaxAckPending int    `json:"maxAckPending"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
@@ -501,17 +582,79 @@ func (h *Handler) CreateConsumer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	deliverPolicy := nats.DeliverAllPolicy
+	switch strings.TrimSpace(req.DeliverPolicy) {
+	case "", "all":
+	case "new":
+		deliverPolicy = nats.DeliverNewPolicy
+	default:
+		writeError(w, http.StatusBadRequest, "deliverPolicy must be all or new")
+		return
+	}
+	ackWait, maxDeliver, maxAckPending, err := parseConsumerOperationalSettings(req.AckWait, req.MaxDeliver, req.MaxAckPending)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	js, cleanup, ok := h.jetStreamForRequest(w, r)
 	if !ok {
 		return
 	}
 	defer cleanup()
-	_, err := js.AddConsumer(stream, &nats.ConsumerConfig{Durable: req.Name, FilterSubject: req.FilterSubject, AckPolicy: nats.AckExplicitPolicy})
+	_, err = js.AddConsumer(stream, &nats.ConsumerConfig{
+		Durable: req.Name, FilterSubject: strings.TrimSpace(req.FilterSubject),
+		AckPolicy: nats.AckExplicitPolicy, DeliverPolicy: deliverPolicy,
+		AckWait: ackWait, MaxDeliver: maxDeliver, MaxAckPending: maxAckPending,
+	})
 	if err != nil {
 		writeJetStreamError(w, err, "failed to create consumer")
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"name": req.Name, "stream": stream})
+}
+
+func (h *Handler) UpdateConsumer(w http.ResponseWriter, r *http.Request) {
+	stream := strings.TrimSpace(r.PathValue("name"))
+	consumer := strings.TrimSpace(r.PathValue("consumer"))
+	if stream == "" || consumer == "" {
+		writeError(w, http.StatusBadRequest, "stream and consumer names are required")
+		return
+	}
+	var req struct {
+		FilterSubject string `json:"filterSubject"`
+		AckWait       string `json:"ackWait"`
+		MaxDeliver    int    `json:"maxDeliver"`
+		MaxAckPending int    `json:"maxAckPending"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	ackWait, maxDeliver, maxAckPending, err := parseConsumerOperationalSettings(req.AckWait, req.MaxDeliver, req.MaxAckPending)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	js, cleanup, ok := h.jetStreamForRequest(w, r)
+	if !ok {
+		return
+	}
+	defer cleanup()
+	info, err := js.ConsumerInfo(stream, consumer)
+	if err != nil {
+		writeJetStreamError(w, err, "consumer not found")
+		return
+	}
+	config := info.Config
+	config.FilterSubject = strings.TrimSpace(req.FilterSubject)
+	config.AckWait = ackWait
+	config.MaxDeliver = maxDeliver
+	config.MaxAckPending = maxAckPending
+	if _, err := js.UpdateConsumer(stream, &config); err != nil {
+		writeJetStreamError(w, err, "failed to update consumer")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"name": consumer, "stream": stream})
 }
 
 func (h *Handler) DeleteConsumer(w http.ResponseWriter, r *http.Request) {

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import ConsumerList from "../Consumers/ConsumerList";
+import type { Consumer } from "../Consumers/ConsumerList";
 import ConsumerForm from "../Consumers/ConsumerForm";
 import type { Account } from "../../types";
 
-type Consumer = { name: string; filterSubject: string };
 
 type StreamDetailType = {
     name: string;
@@ -40,6 +40,7 @@ export default function StreamDetail({
     const [stream, setStream] = useState<StreamDetailType | null>(null);
     const [consumers, setConsumers] = useState<Consumer[]>([]);
     const [error, setError] = useState("");
+    const [subjectError, setSubjectError] = useState("");
     const [loading, setLoading] = useState(false);
     const [newSubject, setNewSubject] = useState("");
     const [subjectLoading, setSubjectLoading] = useState(false);
@@ -146,6 +147,10 @@ export default function StreamDetail({
         streamValue: string,
         name: string,
         filterSubject: string,
+        deliverPolicy: "all" | "new",
+        ackWait: string,
+        maxDeliver: number,
+        maxAckPending: number,
     ) => {
         setError("");
         const res = await fetch(
@@ -158,7 +163,7 @@ export default function StreamDetail({
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify({ name, filterSubject }),
+                body: JSON.stringify({ name, filterSubject, deliverPolicy, ackWait, maxDeliver, maxAckPending }),
             },
         );
         if (res.status === 401) {
@@ -197,9 +202,30 @@ export default function StreamDetail({
         await fetchConsumers(streamName);
     };
 
+    const handleConsumerUpdate = async (
+        name: string,
+        settings: Pick<Consumer, "filterSubject" | "ackWait" | "maxDeliver" | "maxAckPending">,
+    ): Promise<boolean> => {
+        setError("");
+        const path = apiBase + "/api/v1/streams/" + encodeURIComponent(streamName) + "/consumers/" + encodeURIComponent(name);
+        const res = await fetch(withAccountScope(path), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+            body: JSON.stringify(settings),
+        });
+        if (res.status === 401) { onAuthError(); return false; }
+        if (!res.ok) {
+            const data = (await res.json().catch(() => ({}))) as { error?: string };
+            setError(data.error ?? "Failed to update consumer settings.");
+            return false;
+        }
+        await fetchConsumers(streamName);
+        return true;
+    };
+
     const patchSubjects = async (subjects: string[]) => {
         setSubjectLoading(true);
-        setError("");
+        setSubjectError("");
         try {
             const res = await fetch(
                 withAccountScope(
@@ -222,7 +248,7 @@ export default function StreamDetail({
                 const data = (await res.json().catch(() => ({}))) as {
                     error?: string;
                 };
-                setError(data.error ?? "Failed to update subjects.");
+                setSubjectError(data.error ?? "Failed to update subjects.");
                 return;
             }
             const data = (await res.json()) as { subjects: string[] | null };
@@ -393,6 +419,21 @@ export default function StreamDetail({
         } finally { setSourceLoading(false); }
     };
 
+    const handleRemoveSource = async (source: SourceStream) => {
+        if (!window.confirm(`Remove source '${source.name}' and all of its filters from stream '${streamName}'?`)) return;
+        setSourceLoading(true); setError("");
+        try {
+            const res = await fetch(withAccountScope(`${apiBase}/api/v1/streams/${encodeURIComponent(streamName)}/sources`), {
+                method: "DELETE", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                body: JSON.stringify({ sourceAccountPublicKey: source.accountPublicKey, sourceName: source.name, removeAll: true }),
+            });
+            if (res.status === 401) { onAuthError(); return; }
+            if (!res.ok) { const data = (await res.json().catch(() => ({}))) as { error?: string }; setError(data.error ?? "Failed to remove stream source."); return; }
+            const streamRes = await fetch(withAccountScope(`${apiBase}/api/v1/streams/${encodeURIComponent(streamName)}`), { headers: { Authorization: `Bearer ${token}` } });
+            if (streamRes.ok) { const data = (await streamRes.json()) as StreamDetailType; setStream({ ...data, subjects: data.subjects ?? [] }); }
+        } finally { setSourceLoading(false); }
+    };
+
 
     return (
         <section className="panel">
@@ -449,7 +490,7 @@ export default function StreamDetail({
                     >
                         <input
                             value={newSubject}
-                            onChange={(e) => setNewSubject(e.target.value)}
+                            onChange={(e) => { setNewSubject(e.target.value); setSubjectError(""); }}
                             placeholder="new subject (e.g. orders.>)"
                             disabled={subjectLoading}
                             onKeyDown={(e) => {
@@ -467,6 +508,7 @@ export default function StreamDetail({
                             Add
                         </button>
                     </div>
+                    {subjectError && <p className="error">{subjectError}</p>}
                 </div>
 
                 <div>
@@ -482,9 +524,19 @@ export default function StreamDetail({
                         <ul className="list">
                             {sources.map((source) => (
                                 <li key={sourceKey(source)} className="list-row">
-                                    <div>
-                                        <code>{source.name}</code>
-                                        {source.filterSubjects.length === 1 && source.filterSubjects[0] === "" && <span className="muted" style={{ marginLeft: "0.5rem" }}>no filter</span>}
+                                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
+                                        <div>
+                                            <code>{source.name}</code>
+                                            {source.filterSubjects.length === 1 && source.filterSubjects[0] === "" && <span className="muted" style={{ marginLeft: "0.5rem" }}>no filter</span>}
+                                        </div>
+                                        <button
+                                            type="button"
+                                            className="delete-btn"
+                                            disabled={sourceLoading || consumers.length > 0}
+                                            onClick={() => handleRemoveSource(source)}
+                                        >
+                                            Remove source
+                                        </button>
                                     </div>
                                     {source.filterSubjects.filter(Boolean).length > 0 && (
                                         <ul className="list" style={{ width: "100%", marginTop: "0.4rem" }}>
@@ -614,6 +666,7 @@ export default function StreamDetail({
                     <ConsumerList
                         consumers={consumers}
                         onDelete={handleConsumerDelete}
+                        onUpdate={handleConsumerUpdate}
                     />
                 </div>
             </div>

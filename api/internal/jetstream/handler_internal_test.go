@@ -2,6 +2,7 @@ package jetstream
 
 import (
 	"testing"
+	"time"
 
 	"github.com/nats-io/nats.go"
 )
@@ -85,6 +86,44 @@ func TestStreamSourceFilters(t *testing.T) {
 	filters := streamSourceFilters(" orders.created, orders.updated, orders.created, ")
 	if len(filters) != 2 || filters[0] != "orders.created" || filters[1] != "orders.updated" {
 		t.Fatalf("streamSourceFilters() = %#v, want unique trimmed filters", filters)
+	}
+}
+
+func TestRemoveStreamSource(t *testing.T) {
+	source := &nats.StreamSource{Name: "ORDERS"}
+	updated, err := removeStreamSource([]*nats.StreamSource{
+		{Name: "ORDERS", FilterSubject: "orders.created"},
+		{Name: "ORDERS", FilterSubject: "orders.updated"},
+		{Name: "PAYMENTS", FilterSubject: "payments.created"},
+	}, source)
+	if err != nil {
+		t.Fatalf("removeStreamSource() error = %v", err)
+	}
+	if len(updated) != 1 || updated[0].Name != "PAYMENTS" {
+		t.Fatalf("removeStreamSource() = %#v, want only PAYMENTS", updated)
+	}
+}
+
+func TestRemoveStreamSourceRejectsUnknownSource(t *testing.T) {
+	_, err := removeStreamSource([]*nats.StreamSource{{Name: "ORDERS"}}, &nats.StreamSource{Name: "PAYMENTS"})
+	if err == nil {
+		t.Fatal("removeStreamSource() error = nil, want unknown source error")
+	}
+}
+
+func TestParseConsumerOperationalSettings(t *testing.T) {
+	ackWait, maxDeliver, maxAckPending, err := parseConsumerOperationalSettings("", 0, 0)
+	if err != nil {
+		t.Fatalf("defaults returned error: %v", err)
+	}
+	if ackWait != 30*time.Second || maxDeliver != -1 || maxAckPending != 1000 {
+		t.Fatalf("defaults = %v, %d, %d", ackWait, maxDeliver, maxAckPending)
+	}
+	if _, _, _, err := parseConsumerOperationalSettings("bad", 5, 10); err == nil {
+		t.Fatal("invalid ackWait should fail")
+	}
+	if _, _, _, err := parseConsumerOperationalSettings("10s", -2, 10); err == nil {
+		t.Fatal("maxDeliver below -1 should fail")
 	}
 }
 

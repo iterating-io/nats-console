@@ -1,0 +1,18 @@
+asyncapi: 3.1.0
+info:
+  title: Blog draft deleted message
+  version: 1.0.0
+
+components:
+  messages:
+    BlogDraftDeleted:
+      name: BlogDraftDeleted
+      title: Blog draft deleted
+      summary: Identifies a deleted draft for downstream cleanup.
+      payload:
+        $ref: '../schemas/BlogDraftDeletedPayload.yaml#/components/schemas/BlogDraftDeletedPayload'
+      examples:
+        - name: draftDeleted
+          payload:
+            eventId: 3c889e7f-6f5d-4dc8-a8f0-e9f634971c25
+            draftId: 21

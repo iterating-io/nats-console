@@ -176,6 +176,47 @@ func (s *Service) ToggleJetStreamSource(accountPublicKey string, enabled bool) e
 	return err
 }
 
+type claimUpdateResponse struct {
+	Data  *claimUpdateStatus `json:"data,omitempty"`
+	Error *claimUpdateError  `json:"error,omitempty"`
+}
+
+type claimUpdateStatus struct {
+	Account string `json:"account,omitempty"`
+	Code    int    `json:"code,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+type claimUpdateError struct {
+	Account     string `json:"account,omitempty"`
+	Code        int    `json:"code,omitempty"`
+	Description string `json:"description,omitempty"`
+}
+
+func validateClaimUpdateResponse(data []byte, expectedAccount string) error {
+	var response claimUpdateResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return fmt.Errorf("decode NATS claim update response: %w", err)
+	}
+	if response.Error != nil {
+		detail := strings.TrimSpace(response.Error.Description)
+		if detail == "" {
+			detail = "claim update rejected"
+		}
+		return fmt.Errorf("NATS rejected account %s JWT (code %d): %s", response.Error.Account, response.Error.Code, detail)
+	}
+	if response.Data == nil {
+		return fmt.Errorf("NATS claim update response has neither data nor error")
+	}
+	if response.Data.Code < 200 || response.Data.Code >= 300 {
+		return fmt.Errorf("NATS claim update returned code %d: %s", response.Data.Code, response.Data.Message)
+	}
+	if strings.TrimSpace(response.Data.Account) != strings.TrimSpace(expectedAccount) {
+		return fmt.Errorf("NATS claim update account mismatch: got %q, want %q", response.Data.Account, expectedAccount)
+	}
+	return nil
+}
+
 func (s *Service) PushAccountClaimsToNATS(claims *natsjwt.AccountClaims, opKP nkeys.KeyPair) (*nats.Msg, error) {
 	nc := s.natsConn()
 	jwt, err := claims.Encode(opKP)
@@ -186,11 +227,8 @@ func (s *Service) PushAccountClaimsToNATS(claims *natsjwt.AccountClaims, opKP nk
 	if err != nil {
 		return nil, fmt.Errorf("push account JWT: %w", err)
 	}
-	var resp struct {
-		Error string `json:"error"`
-	}
-	if json.Unmarshal(msg.Data, &resp) == nil && resp.Error != "" {
-		return nil, fmt.Errorf("NATS rejected JWT: %s", resp.Error)
+	if err := validateClaimUpdateResponse(msg.Data, claims.Subject); err != nil {
+		return nil, err
 	}
 	return msg, nil
 }

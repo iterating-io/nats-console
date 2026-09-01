@@ -1,0 +1,65 @@
+asyncapi: 3.1.0
+id: urn:iterating:blog-api
+info:
+  title: blog-api event API
+  version: 1.0.0
+  description: Events sent by blog-api.
+
+defaultContentType: application/json
+
+servers:
+  nats:
+    host: nats.iterating.io:34222
+    protocol: nats
+    description: NATS server with JetStream enabled.
+    x-nats-account: blog
+
+channels:
+  BlogDraftCreated:
+    address: blog.draft.created
+    x-jetstream:
+      stream: BLOG_EVENTS
+    messages:
+      BlogDraftCreated:
+        $ref: './messages/BlogDraftCreated.yaml#/components/messages/BlogDraftCreated'
+
+  BlogDraftDeleted:
+    address: blog.draft.deleted
+    x-jetstream:
+      stream: BLOG_EVENTS
+    messages:
+      BlogDraftDeleted:
+        $ref: './messages/BlogDraftDeleted.yaml#/components/messages/BlogDraftDeleted'
+
+  BlogDraftUpdated:
+    address: blog.draft.updated
+    x-jetstream:
+      stream: BLOG_EVENTS
+    messages:
+      BlogDraftUpdated:
+        $ref: './messages/BlogDraftUpdated.yaml#/components/messages/BlogDraftUpdated'
+
+operations:
+  sendBlogDraftCreated:
+    action: send
+    channel:
+      $ref: '#/channels/BlogDraftCreated'
+    messages:
+      - $ref: '#/channels/BlogDraftCreated/messages/BlogDraftCreated'
+    summary: Publish a newly created blog draft.
+
+  sendBlogDraftDeleted:
+    action: send
+    channel:
+      $ref: '#/channels/BlogDraftDeleted'
+    messages:
+      - $ref: '#/channels/BlogDraftDeleted/messages/BlogDraftDeleted'
+    summary: Publish a deleted blog draft.
+
+  sendBlogDraftUpdated:
+    action: send
+    channel:
+      $ref: '#/channels/BlogDraftUpdated'
+    messages:
+      - $ref: '#/channels/BlogDraftUpdated/messages/BlogDraftUpdated'
+    summary: Publish an updated blog draft.

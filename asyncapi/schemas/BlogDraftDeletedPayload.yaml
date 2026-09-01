@@ -1,0 +1,22 @@
+asyncapi: 3.1.0
+info:
+  title: Blog draft deleted payload schema
+  version: 1.0.0
+
+components:
+  schemas:
+    BlogDraftDeletedPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - draftId
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: Unique identifier for this originating event; generate a new UUID.
+        draftId:
+          type: integer
+          minimum: 1
+          description: Identifier of the deleted draft.

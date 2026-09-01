@@ -462,7 +462,216 @@ button:disabled {
     color: #ffd2a2;
 }
 
+.consumer-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.field-label,
+.consumer-options legend {
+    color: var(--sand);
+    font-size: 13px;
+}
+
+.consumer-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+}
+
+.consumer-options label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+}
+
+.consumer-options input[type="radio"] {
+    width: auto;
+    margin: 0;
+    padding: 0;
+}
+
+.consumer-defaults {
+    margin: 0;
+}
+
+.info-tip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    margin-left: 4px;
+    border: 1px solid var(--sand);
+    border-radius: 50%;
+    color: var(--sand);
+    font: 600 11px/1 "IBM Plex Mono", monospace;
+    cursor: help;
+    outline: none;
+}
+
+.info-tip:focus {
+    border-color: #f18f55;
+    color: #f18f55;
+}
+
+.info-tip-content {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    z-index: 20;
+    display: none;
+    width: max-content;
+    max-width: 300px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #081114;
+    color: var(--text);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+    font: 12px/1.45 "Space Grotesk", sans-serif;
+    text-align: left;
+    transform: translateX(-50%);
+}
+
+.info-tip-description {
+    display: block;
+    font-weight: 600;
+}
+
+.info-tip-content ul {
+    margin: 7px 0 0;
+    padding-left: 18px;
+}
+
+.info-tip-content li + li {
+    margin-top: 4px;
+}
+
+.info-tip:hover .info-tip-content,
+.info-tip:focus .info-tip-content,
+.info-tip:focus-within .info-tip-content {
+    display: block;
+}
+
+
+.consumer-advanced {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+}
+
+.consumer-advanced summary {
+    color: var(--sand);
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.consumer-advanced-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.consumer-list {
+    gap: 12px;
+}
+
+.consumer-card {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+}
+
+.consumer-card-header,
+.consumer-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.consumer-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.consumer-summary .badge {
+    padding: 3px 8px;
+    font-size: 11px;
+}
+
+.secondary-btn {
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--sand);
+    font-weight: 500;
+}
+
+.secondary-btn:hover {
+    border-color: #f18f55;
+    color: #f18f55;
+}
+
+.consumer-settings {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+}
+
+.consumer-settings > div {
+    padding: 8px;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.consumer-settings dt {
+    color: var(--sand);
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.consumer-settings dd {
+    margin: 4px 0 0;
+    overflow-wrap: anywhere;
+}
+
+.consumer-edit-form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.consumer-edit-form .consumer-actions {
+    justify-content: flex-end;
+}
+
+
 @media (max-width: 980px) {
+    .consumer-advanced-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .consumer-settings {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .consumer-card-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
     .grid {
         grid-template-columns: 1fr;
     }

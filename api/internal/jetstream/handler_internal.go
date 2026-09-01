@@ -110,6 +110,22 @@ func updateStreamSourceFilters(sources []*nats.StreamSource, source *nats.Stream
 	return updated, nil
 }
 
+func removeStreamSource(sources []*nats.StreamSource, source *nats.StreamSource) ([]*nats.StreamSource, error) {
+	updated := make([]*nats.StreamSource, 0, len(sources))
+	removed := false
+	for _, existing := range sources {
+		if sameStreamSourceIdentity(existing, source) {
+			removed = true
+			continue
+		}
+		updated = append(updated, existing)
+	}
+	if !removed {
+		return nil, errors.New("stream source is not configured")
+	}
+	return updated, nil
+}
+
 func removeStreamSourceFilter(sources []*nats.StreamSource, source *nats.StreamSource, filter string) ([]*nats.StreamSource, error) {
 	updated := make([]*nats.StreamSource, 0, len(sources)-1)
 	removed := false

@@ -257,8 +257,14 @@ func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusPreconditionFailed, "account delete is disabled in NATS resolver configuration")
 		return
 	}
-	if _, ok := h.repo.FindByPublicKey(operator, accountPublicKey); !ok {
+	account, ok := h.repo.FindByPublicKey(operator, accountPublicKey)
+	if !ok {
 		writeError(w, http.StatusNotFound, "account not found")
+		return
+	}
+	if err := h.service.CleanupAccountResources(account); err != nil {
+		log.Printf("deleteAccount: resource cleanup failed for %s/%s: %v", operator, accountPublicKey, err)
+		writeError(w, http.StatusBadGateway, "failed to clean up account streams and source connections: "+err.Error())
 		return
 	}
 	if _, exists := h.repo.FindByName(singleOperator(h.repo), asyncAPICheckerAccountName); exists && !strings.EqualFold(accountPublicKey, h.asyncAPICheckerKey()) {

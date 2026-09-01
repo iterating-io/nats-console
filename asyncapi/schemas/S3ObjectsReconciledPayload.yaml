@@ -1,0 +1,49 @@
+asyncapi: 3.1.0
+info:
+  title: S3 objects reconciled payload schema
+  version: 1.0.0
+
+components:
+  schemas:
+    S3ObjectsReconciledPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - sourceEventId
+        - completedAt
+        - draftId
+        - bucket
+        - path
+        - objects
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: UUIDv5 with sourceEventId as the namespace and s3.objects.reconciled as the name.
+        sourceEventId:
+          type: string
+          format: uuid
+          description: eventId of the s3.objects.reconcile event that caused this event.
+        completedAt:
+          type: string
+          format: date-time
+          description: Time at which reconciliation completed.
+        draftId:
+          type: integer
+          minimum: 1
+          description: Identifier of the source blog draft.
+        bucket:
+          type: string
+          minLength: 1
+          description: S3 bucket name without a trailing slash.
+        path:
+          type: string
+          description: Reconciled object-prefix path.
+        objects:
+          type: array
+          description: Reconciled object file names relative to path.
+          minItems: 0
+          items:
+            type: string
+            minLength: 1

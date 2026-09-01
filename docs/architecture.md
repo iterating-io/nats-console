@@ -57,7 +57,9 @@ The API connects to NATS using a dynamically generated user credential:
 - The console manages one `asyncapi-checker` account for its single operator.
 - The AsyncAPI page can create the account and selectively import each JetStream-enabled service account's `$JS.API.STREAM.INFO.>` subject as a private NATS service import.
 - Each import is given a local alias, `checker.<service-account>.$JS.API.STREAM.INFO.>`, and is protected with an activation token signed by the service account.
-- The checker user is restricted to publishing to enabled aliases and subscribing to `_INBOX.>` for request/reply responses. It has no event-subject or stream/consumer mutation permission.
+- The checker can also request `checker.status.account` with `{"account":"<name>"}`. The private system-account service replies with only `exists`, `jetstreamEnabled`, and `streamInfoImportEnabled`, so a checker can distinguish missing accounts, disabled JetStream, and disabled Stream Info imports without system-account credentials.
+- Supplying `{"account":"BLOG_EVENTS","sourceTarget":"eventpipe"}` additionally returns the source-sharing state derived from the source and target account claims: source-sharing enabled, all required source exports, and the target's Consumer API, delivery-subject, and flow-control imports. This lets an `x-source` checker report actual readiness rather than infer it from stream existence.
+- The checker user is restricted to publishing to the status subject and enabled aliases and subscribing to `_INBOX.>` for request/reply responses. It has no event-subject or stream/consumer mutation permission.
 
 ## Operator / Account / User Management
 

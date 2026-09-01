@@ -1,0 +1,55 @@
+asyncapi: 3.1.0
+id: urn:iterating:s3-object-reconciler
+info:
+  title: S3 object reconciler event API
+  version: 1.0.0
+  description: Reconciles S3 objects from reconciliation commands.
+
+defaultContentType: application/json
+
+servers:
+  nats:
+    host: nats.iterating.io:34222
+    protocol: nats
+    description: NATS server with JetStream enabled.
+    x-nats-account: s3
+
+channels:
+  S3ObjectsReconcile:
+    address: s3.objects.reconcile
+    x-source:
+      account: eventpipe
+      stream: EVENTPIPE_COMMANDS
+      filterSubject: s3.objects.reconcile
+    x-jetstream:
+      stream: S3_INBOX
+    messages:
+      S3ObjectsReconcile:
+        $ref: './messages/S3ObjectsReconcile.yaml#/components/messages/S3ObjectsReconcile'
+
+  S3ObjectsReconciled:
+    address: s3.objects.reconciled
+    x-jetstream:
+      stream: S3_EVENTS
+    messages:
+      S3ObjectsReconciled:
+        $ref: './messages/S3ObjectsReconciled.yaml#/components/messages/S3ObjectsReconciled'
+
+operations:
+  receiveS3ObjectsReconcile:
+    action: receive
+    x-jetstream-consumer:
+      name: S3_INBOX_CONSUMER
+    channel:
+      $ref: '#/channels/S3ObjectsReconcile'
+    messages:
+      - $ref: '#/channels/S3ObjectsReconcile/messages/S3ObjectsReconcile'
+    summary: Receive an S3 object reconciliation command.
+
+  sendS3ObjectsReconciled:
+    action: send
+    channel:
+      $ref: '#/channels/S3ObjectsReconciled'
+    messages:
+      - $ref: '#/channels/S3ObjectsReconciled/messages/S3ObjectsReconciled'
+    summary: Send confirmation that S3 object reconciliation completed.

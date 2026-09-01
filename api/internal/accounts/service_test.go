@@ -2,6 +2,7 @@ package accounts
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/nats-io/nkeys"
@@ -71,5 +72,36 @@ func TestSubjectAllowed(t *testing.T) {
 	}
 	if SubjectAllowed("logs.error", allowed) {
 		t.Fatal("expected logs.error to be denied")
+	}
+}
+
+func TestValidateClaimUpdateResponse(t *testing.T) {
+	tests := []struct {
+		name      string
+		response  string
+		account   string
+		wantError bool
+		contains  string
+	}{
+		{name: "success", response: "{\"data\":{\"account\":\"A123\",\"code\":200,\"message\":\"jwt updated\"}}", account: "A123"},
+		{name: "structured error", response: "{\"error\":{\"account\":\"A123\",\"code\":500,\"description\":\"jwt validation failed\"}}", account: "A123", wantError: true, contains: "jwt validation failed"},
+		{name: "malformed JSON", response: "{", account: "A123", wantError: true, contains: "decode NATS claim update response"},
+		{name: "missing result", response: "{}", account: "A123", wantError: true, contains: "neither data nor error"},
+		{name: "failure status", response: "{\"data\":{\"account\":\"A123\",\"code\":500,\"message\":\"not applied\"}}", account: "A123", wantError: true, contains: "code 500"},
+		{name: "account mismatch", response: "{\"data\":{\"account\":\"A999\",\"code\":200,\"message\":\"jwt updated\"}}", account: "A123", wantError: true, contains: "account mismatch"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateClaimUpdateResponse([]byte(test.response), test.account)
+			if test.wantError && err == nil {
+				t.Fatal("expected error")
+			}
+			if !test.wantError && err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if test.contains != "" && (err == nil || !strings.Contains(err.Error(), test.contains)) {
+				t.Fatalf("error = %v, want substring %q", err, test.contains)
+			}
+		})
 	}
 }

@@ -1,0 +1,31 @@
+asyncapi: 3.1.0
+info:
+  title: Blog draft updated payload schema
+  version: 1.0.0
+
+components:
+  schemas:
+    BlogDraftUpdatedPayload:
+      type: object
+      additionalProperties: false
+      required:
+        - eventId
+        - draftId
+        - images
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          description: Unique identifier for this originating event; generate a new UUID.
+        draftId:
+          type: integer
+          minimum: 1
+          description: Identifier of the updated draft.
+        images:
+          type: array
+          description: Current public S3 image URLs associated with the draft.
+          minItems: 0
+          items:
+            type: string
+            minLength: 1
+            format: uri

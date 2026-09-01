@@ -1,0 +1,101 @@
+asyncapi: 3.1.0
+id: urn:iterating:eventpipe
+info:
+  title: Eventpipe API
+  version: 1.0.0
+  description: |
+    Receives domain events that downstream services cannot use directly,
+    processes their contents, and sends derived events.
+
+defaultContentType: application/json
+
+servers:
+  nats:
+    host: nats.iterating.io:34222
+    protocol: nats
+    description: NATS server with JetStream enabled.
+    x-nats-account: eventpipe
+
+channels:
+  BlogDraftCreated:
+    address: blog.draft.created
+    x-source:
+      account: blog
+      stream: BLOG_EVENTS
+      filterSubject: blog.draft.created
+    x-jetstream:
+      stream: EVENTPIPE_INBOX
+    messages:
+      BlogDraftCreated:
+        $ref: './messages/BlogDraftCreated.yaml#/components/messages/BlogDraftCreated'
+
+  BlogDraftDeleted:
+    address: blog.draft.deleted
+    x-source:
+      account: blog
+      stream: BLOG_EVENTS
+      filterSubject: blog.draft.deleted
+    x-jetstream:
+      stream: EVENTPIPE_INBOX
+    messages:
+      BlogDraftDeleted:
+        $ref: './messages/BlogDraftDeleted.yaml#/components/messages/BlogDraftDeleted'
+
+  BlogDraftUpdated:
+    address: blog.draft.updated
+    x-source:
+      account: blog
+      stream: BLOG_EVENTS
+      filterSubject: blog.draft.updated
+    x-jetstream:
+      stream: EVENTPIPE_INBOX
+    messages:
+      BlogDraftUpdated:
+        $ref: './messages/BlogDraftUpdated.yaml#/components/messages/BlogDraftUpdated'
+
+  S3ObjectsReconcile:
+    address: s3.objects.reconcile
+    x-jetstream:
+      stream: EVENTPIPE_COMMANDS
+    messages:
+      S3ObjectsReconcile:
+        $ref: './messages/S3ObjectsReconcile.yaml#/components/messages/S3ObjectsReconcile'
+
+operations:
+  receiveBlogDraftCreated:
+    action: receive
+    x-jetstream-consumer:
+      name: EVENTPIPE_INBOX_CONSUMER
+    channel:
+      $ref: '#/channels/BlogDraftCreated'
+    messages:
+      - $ref: '#/channels/BlogDraftCreated/messages/BlogDraftCreated'
+    summary: Receive a newly created blog draft.
+
+  receiveBlogDraftDeleted:
+    action: receive
+    x-jetstream-consumer:
+      name: EVENTPIPE_INBOX_CONSUMER
+    channel:
+      $ref: '#/channels/BlogDraftDeleted'
+    messages:
+      - $ref: '#/channels/BlogDraftDeleted/messages/BlogDraftDeleted'
+    summary: Receive a deleted blog draft.
+
+  receiveBlogDraftUpdated:
+    action: receive
+    x-jetstream-consumer:
+      name: EVENTPIPE_INBOX_CONSUMER
+    channel:
+      $ref: '#/channels/BlogDraftUpdated'
+    messages:
+      - $ref: '#/channels/BlogDraftUpdated/messages/BlogDraftUpdated'
+    summary: Receive an updated blog draft.
+
+  sendS3ObjectsReconcile:
+    action: send
+    channel:
+      $ref: '#/channels/S3ObjectsReconcile'
+    messages:
+      - $ref: '#/channels/S3ObjectsReconcile/messages/S3ObjectsReconcile'
+    summary: Send an S3 reconciliation command derived from the draft event.
