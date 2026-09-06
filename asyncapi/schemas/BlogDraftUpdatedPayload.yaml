@@ -11,7 +11,7 @@ components:
       required:
         - eventId
         - draftId
-        - images
+        - imageSet
       properties:
         eventId:
           type: string
@@ -21,11 +21,5 @@ components:
           type: integer
           minimum: 1
           description: Identifier of the updated draft.
-        images:
-          type: array
-          description: Current public S3 image URLs associated with the draft.
-          minItems: 0
-          items:
-            type: string
-            minLength: 1
-            format: uri
+        imageSet:
+          $ref: './BlogDraftImageSet.yaml#/components/schemas/BlogDraftImageSet'

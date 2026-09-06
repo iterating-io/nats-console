@@ -16,3 +16,7 @@ components:
           payload:
             eventId: 3c889e7f-6f5d-4dc8-a8f0-e9f634971c25
             draftId: 21
+            imageSet:
+              bucket: dev.blog.iterating.io
+              path: public/draft/21/
+              objects: []

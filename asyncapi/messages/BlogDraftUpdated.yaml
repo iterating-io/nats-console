@@ -8,7 +8,7 @@ components:
     BlogDraftUpdated:
       name: BlogDraftUpdated
       title: Blog draft updated
-      summary: Identifies an updated draft and its image URLs.
+      summary: Identifies an updated draft and the desired state of its image objects.
       payload:
         $ref: '../schemas/BlogDraftUpdatedPayload.yaml#/components/schemas/BlogDraftUpdatedPayload'
       examples:
@@ -16,5 +16,8 @@ components:
           payload:
             eventId: a4f3c2d1-7b68-4e90-9abc-1234567890ab
             draftId: 26
-            images:
-              - https://s3.iterating.io/dev.blog.iterating.io/public/draft/26/3b50f728-0d96-436e-ab42-033c00e3468d.png
+            imageSet:
+              bucket: dev.blog.iterating.io
+              path: public/draft/26/
+              objects:
+                - 3b50f728-0d96-436e-ab42-033c00e3468d.png

@@ -1,0 +1,33 @@
+asyncapi: 3.1.0
+info:
+  title: Blog draft image set schema
+  version: 1.0.0
+
+components:
+  schemas:
+    BlogDraftImageSet:
+      type: object
+      additionalProperties: false
+      description: Complete desired state of the S3 objects associated with a draft.
+      required:
+        - bucket
+        - path
+        - objects
+      properties:
+        bucket:
+          type: string
+          minLength: 1
+          description: S3 bucket name without a trailing slash.
+        path:
+          type: string
+          minLength: 1
+          pattern: /$
+          description: Common object-prefix path ending with a slash.
+        objects:
+          type: array
+          description: Current object names relative to path; empty means remove every object under the path.
+          minItems: 0
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
