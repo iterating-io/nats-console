@@ -16,9 +16,14 @@ services:
             dockerfile: deploy/dockerfile.console
             args:
                 WEB_BASE_PATH: ${WEB_BASE_PATH:-/}
-        env_file:
-            - ../.env
         environment:
+            NATS_URL: "${NATS_APP_URL:?NATS_APP_URL must be exported by direnv}"
+            NATS_SYS_JWT: "${NATS_SYS_JWT:?NATS_SYS_JWT must be exported by direnv}"
+            NATS_SYS_NKEY: "${NATS_SYS_NKEY:?NATS_SYS_NKEY must be exported by direnv}"
+            OPERATOR_NKEY: "${OPERATOR_NKEY:?OPERATOR_NKEY must be exported by direnv}"
+            ADMIN_ID: "${ADMIN_ID:?ADMIN_ID must be exported by direnv}"
+            ADMIN_PASSWORD: "${ADMIN_PASSWORD:?ADMIN_PASSWORD must be exported by direnv}"
+            ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost}"
             DB_PATH: "/app/data/console.db"
         ports:
             - "9222:9222"

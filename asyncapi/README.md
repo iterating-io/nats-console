@@ -27,14 +27,15 @@ Stream을 생성하거나 변경하지 않으며, `asyncapi-checker` account의 
 필요하다.
 
 ```bash
-NATS_URL=nats://nats.iterating.io:34222 \
-NATS_CREDS=/path/to/asyncapi-checker.creds \
 ./asyncapi/check-channels.py
 ```
 
+로컬 환경 변수와 credentials 경로는 프로젝트 루트의 `.envrc`에서 불러온다.
+프로젝트 루트에서 `direnv allow` 후 위 명령을 실행한다.
+
 기본값은 전체 account 검사다. 특정 account만 검사하려면 `NATS_ACCOUNT=blog`처럼
-지정한다. NATS Console에서 검사할 각 서비스 account의 Stream Info 및 Consumer Info import를
-`asyncapi-checker`에 활성화해야 한다.
+지정한다. NATS Console API가 account별 JetStream 조회와 판정을 수행하므로 변경된
+API를 먼저 배포하거나 재시작해야 한다.
 `NATS_ACCOUNT`를 지정하면 해당 account가 소유한 채널뿐 아니라 다른 문서가
 `x-source.account`로 해당 account를 참조하는 downstream source 연결도 검사한다.
 

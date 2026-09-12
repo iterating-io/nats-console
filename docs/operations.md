@@ -10,10 +10,11 @@ Use `run.sh` from the project root. The script handles the full boot sequence au
 
 Boot sequence:
 
-1. If the generated credential set is missing or inconsistent (`.env`, `deploy/auth.conf`, or required files under `deploy/keys/`): remove stale generated state, reset named Docker volumes, and regenerate credentials with `tools/bootstrap` (Go SDK only, no external tools, local development only)
-2. Build and start the NATS container
-3. Wait for NATS to be healthy (`/healthz`)
-4. Build and start the `app` container (Nginx + API binary in one image)
+1. If the generated credential set is missing or inconsistent (`.envrc`, `deploy/auth.conf`, or required files under `deploy/keys/`): remove stale generated state, reset named Docker volumes, and regenerate credentials with `tools/bootstrap` (Go SDK only, no external tools, local development only)
+2. Load the generated root environment with `direnv allow`; the first bootstrap run exits so the shell can reload it
+3. Build and start the NATS container
+4. Wait for NATS to be healthy (`/healthz`)
+5. Build and start the `app` container (Nginx + API binary in one image)
 
 ## Prerequisites
 
@@ -27,15 +28,15 @@ NATS runs in Operator mode. On first run, `run.sh up` automatically generates al
 This bootstrap flow is intended for local development only.
 For production, use your existing NATS deployment where Operator and required accounts are already provisioned, and inject `NATS_SYS_NKEY` and `OPERATOR_NKEY` from that environment.
 
-### Generated files (gitignored)
+### Generated local files
 
 | File        | Description                                                                                                        |
 | ----------- | ------------------------------------------------------------------------------------------------------------------ |
 | `auth.conf` | Operator JWT, system account public key, resolver config (`allow_delete: true` by default), and `resolver_preload` |
-| `.env`      | API runtime settings plus `NATS_SYS_NKEY` and `OPERATOR_NKEY`                                                      |
+| `.envrc`    | direnv settings for API, Compose, web build, and local AsyncAPI checker                                           |
 | `keys/`     | NKey seed files for operator, system account, and system user (backup/recovery only)                               |
 
-To regenerate credentials manually, delete `.env`, `deploy/auth.conf`, and `deploy/keys/`, then run `./run.sh up` again.
+To regenerate credentials manually, delete `.envrc`, `deploy/auth.conf`, and `deploy/keys/`, then run `./run.sh up` and `direnv allow` again.
 
 When bootstrap regenerates credentials, `run.sh up` also removes the `deploy_nats-resolver` and `deploy_console-data` Docker volumes so stale resolver JWTs and user rows cannot leak into the new identity set.
 
@@ -104,9 +105,11 @@ A single multi-stage image packages the full application:
 
 ### Environment variable loading
 
-`deploy/docker-compose.yml` includes `env_file: ../.env` so the root `.env` file is loaded directly by Docker Compose. All environment variables come from `.env`.
+The root `.envrc` is the single local environment source. direnv exports it into the developer shell; `run.sh` does not source an environment file. Docker Compose explicitly passes only the API variables needed by the app container.
 
-In remote deployments, provide the same variables via the platform's secret/env injection mechanism — no `.env` file required.
+Use `NATS_URL=nats://localhost:4222` for host-side tools and `NATS_APP_URL=nats://nats:4222` for the app container's Compose service DNS.
+
+In remote deployments, provide the same variables via the platform's secret/env injection mechanism — no `.envrc` file required.
 
 ### NATS_URL for local vs remote
 

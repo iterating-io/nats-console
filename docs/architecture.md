@@ -11,7 +11,7 @@
 
 The API connects to NATS using a dynamically generated user credential:
 
-- `NATS_SYS_NKEY` — sys account seed (`SA...`) stored in `.env`
+- `NATS_SYS_NKEY` — sys account seed (`SA...`) exported by the root `.envrc`
 - At startup, the server generates a fresh user keypair via `nkeys.CreateUser()`, signs a user JWT with the sys account seed, and uses that ephemeral credential for the NATS connection
 - The base bootstrap only provisions operator and system identities; the JetStream application account is managed later by the API at runtime
 
@@ -57,7 +57,7 @@ The API connects to NATS using a dynamically generated user credential:
 - The console manages one `asyncapi-checker` account for its single operator.
 - The AsyncAPI page can create the account and selectively import each JetStream-enabled service account's `$JS.API.STREAM.INFO.>` subject as a private NATS service import.
 - Each import is given a local alias, `checker.<service-account>.$JS.API.STREAM.INFO.>`, and is protected with an activation token signed by the service account.
-- The checker can also request `checker.status.account` with `{"account":"<name>"}`. The private system-account service replies with only `exists`, `jetstreamEnabled`, and `streamInfoImportEnabled`, so a checker can distinguish missing accounts, disabled JetStream, and disabled Stream Info imports without system-account credentials.
+- The checker can request `checker.status.account` with either a legacy account-status request or a `channels` array. For channel requests, the private system-account service uses nats-console's account and JetStream functions to perform Stream, subject, Consumer, and source checks and returns structured status for every declaration.
 - Supplying `{"account":"BLOG_EVENTS","sourceTarget":"eventpipe"}` additionally returns the source-sharing state derived from the source and target account claims: source-sharing enabled, all required source exports, and the target's Consumer API, delivery-subject, and flow-control imports. This lets an `x-source` checker report actual readiness rather than infer it from stream existence.
 - The checker user is restricted to publishing to the status subject and enabled aliases and subscribing to `_INBOX.>` for request/reply responses. It has no event-subject or stream/consumer mutation permission.
 

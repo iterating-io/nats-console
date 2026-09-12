@@ -1,0 +1,17 @@
+# Copy to .envrc for local development and run `direnv allow`.
+
+# API container
+export NATS_APP_URL=nats://nats:4222
+export NATS_SYS_JWT=eyJxxxxxxxx
+export NATS_SYS_NKEY=Sxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+export OPERATOR_NKEY=SOxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+export ADMIN_ID=admin
+export ADMIN_PASSWORD=securepassword
+export ALLOWED_ORIGINS=http://localhost
+
+# WEB
+export WEB_BASE_PATH=/
+
+# Host-side AsyncAPI checker
+export NATS_URL=nats://localhost:4222
+export NATS_CREDS=./update-checker.creds

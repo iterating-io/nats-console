@@ -3,18 +3,18 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/deploy/docker-compose.yml"
-ROOT_ENV="$SCRIPT_DIR/.env"
+ROOT_ENVRC="$SCRIPT_DIR/.envrc"
 
-# Load .env into the shell environment when present.
-# docker compose reads env vars from the calling shell, so there is no
-# env_file reference in docker-compose.yml. Remote deployments simply
-# provide the same variables through the process environment.
-load_env() {
-    if [[ -f "$ROOT_ENV" ]]; then
-        set -a
-        # shellcheck source=/dev/null
-        source "$ROOT_ENV"
-        set +a
+require_direnv() {
+    local missing=()
+    local name
+    for name in NATS_APP_URL NATS_SYS_JWT NATS_SYS_NKEY OPERATOR_NKEY ADMIN_ID ADMIN_PASSWORD; do
+        [[ -z "${!name:-}" ]] && missing+=("$name")
+    done
+    if (( ${#missing[@]} > 0 )); then
+        echo "ERROR: environment is not loaded: ${missing[*]}"
+        echo "Run 'direnv allow' in the project root and retry."
+        exit 1
     fi
 }
 
@@ -42,10 +42,10 @@ case "${1:-help}" in
         KEYS_DIR="$SCRIPT_DIR/deploy/keys"
 
         # Step 1: bootstrap if any required file is missing or auth.conf is outdated.
-        # Partial state (e.g. .env present but keys/ missing) is also treated as
+        # Partial state (e.g. .envrc present but keys/ missing) is also treated as
         # a broken setup — remove everything and regenerate to keep files in sync.
         needs_bootstrap=false
-        [[ ! -f "$ROOT_ENV" ]] && needs_bootstrap=true
+        [[ ! -f "$ROOT_ENVRC" ]] && needs_bootstrap=true
         [[ ! -f "$AUTH_CONF" ]] && needs_bootstrap=true
         [[ ! -f "$KEYS_DIR/operator.nk" ]] && needs_bootstrap=true
         [[ ! -f "$KEYS_DIR/sys-account.nk" ]] && needs_bootstrap=true
@@ -72,7 +72,7 @@ case "${1:-help}" in
             # Bring down containers first so volumes are not in use.
             docker compose -f "$COMPOSE_FILE" down 2>/dev/null || true
 
-            rm -f "$ROOT_ENV" "$AUTH_CONF" \
+            rm -f "$ROOT_ENVRC" "$AUTH_CONF" \
                   "$SCRIPT_DIR/deploy/.env.nats" "$SCRIPT_DIR/deploy/.env.operator"
             rm -rf "$KEYS_DIR"
             # Clear persisted user data too. Re-bootstrapping creates a new
@@ -84,9 +84,11 @@ case "${1:-help}" in
             (cd "$SCRIPT_DIR/tools/bootstrap" && go run . --out-dir "$SCRIPT_DIR/deploy")
 
             echo ">> Operator bootstrapped."
+            echo ">> Run 'direnv allow' and execute './run.sh up' again."
+            exit 0
         fi
 
-        load_env
+        require_direnv
 
         # Step 2: start NATS only (build image)
         docker compose -f "$COMPOSE_FILE" up --build -d nats
@@ -148,7 +150,7 @@ case "${1:-help}" in
             # Force-remove named volumes in case compose left them behind
             docker volume rm deploy_nats-resolver deploy_console-data 2>/dev/null || true
             # Remove generated credential files so next `up` re-bootstraps
-            rm -f "$SCRIPT_DIR/.env" \
+            rm -f "$SCRIPT_DIR/.envrc" \
                   "$SCRIPT_DIR/deploy/.env.nats" \
                   "$SCRIPT_DIR/deploy/.env.operator" \
                   "$SCRIPT_DIR/deploy/auth.conf"

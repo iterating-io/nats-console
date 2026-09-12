@@ -32,7 +32,7 @@ checker는 다음 작업을 수행하지 않는다.
 | 구성요소 | 위치 | 역할 |
 | --- | --- | --- |
 | AsyncAPI 문서 | `asyncapi/*.yaml` | 기대하는 account, channel, Stream, source 관계 선언 |
-| 검사 스크립트 | `asyncapi/check-channels.py` | 문서에서 검사 계획을 만들고 NATS 응답과 비교 |
+| 검사 스크립트 | `asyncapi/check-channels.py` | 문서에서 검사 요청을 만들고 Console의 판정 결과를 출력 |
 | `asyncapi-checker` account | NATS resolver | 여러 account의 제한된 API를 모으는 독립 subject 공간 |
 | `asyncapi-checker` user | Console store + 발급된 `.creds` | 허용된 요청 subject만 publish하고 `_INBOX.>`로 응답 수신 |
 | 서비스 account | blog, eventpipe, s3 등 | 실제 JetStream Stream 소유 |
@@ -60,13 +60,16 @@ Console의 HTTP API가 account JWT, export/import, activation token, user 권한
 ### 검사 흐름
 
 `check-channels.py`는 Console HTTP API를 호출하지 않는다. 발급된 checker
-credentials로 NATS request/reply를 직접 실행한다.
+credentials로 Console의 private checker service에 선언 전체를 요청한다. account
+claims 조회, JetStream 조회, subject wildcard 비교와 source/consumer 판정은 모두
+Console API 프로세스가 수행한다.
 
 ```text
 check-channels.py
   -> checker status NATS service
-  -> JetStream Stream Info NATS API
-  -> AsyncAPI 문서와 응답 비교
+  -> Console의 account별 JetStream 연결
+  -> Console이 AsyncAPI 선언과 실제 상태를 비교
+  -> 구조화된 판정 결과 반환
 ```
 
 ## Console HTTP API와 checker 생성
@@ -323,6 +326,11 @@ account 상태 요청:
 {"account":"blog"}
 ```
 
+전체 channel 검사 요청은 같은 service에 `channels` 배열로 보낸다. 각 항목에는
+`account`, `stream`, `subject`, publish/consumer/source 선언이 포함된다. Console은
+관리 중인 account signing key로 읽기 전용 JetStream 연결을 만들고 모든 판정을
+수행한다. 기존 단일 account 상태 요청은 호환성을 위해 계속 지원한다.
+
 응답:
 
 ```json
@@ -460,10 +468,9 @@ eventpipe, EVENTPIPE_INBOX, blog.draft.updated, blog, BLOG_EVENTS, false
 
 | 검사 | 데이터 출처 | 통과 기준 | 실패 후 건너뛰는 검사 |
 | --- | --- | --- | --- |
-| checker 상태 API | NATS request/reply | 유효한 JSON 응답 수신 | account, JetStream, import, Stream 이하 |
-| 서비스 account 확인 | status `exists` | `true` | JetStream, import, Stream 이하 |
-| JetStream 활성화 | status `jetstreamEnabled` | `true` | Stream Info import, Stream 이하 |
-| checker Stream Info 연결 | status `streamInfoImportEnabled` | `true` | Stream 존재와 channel 검사 |
+| checker service | NATS request/reply | 요청한 channel 수와 같은 구조화된 응답 수신 | 모든 검사 |
+| 서비스 account 확인 | channel status의 `account.exists` | `true` | JetStream, Stream 이하 |
+| JetStream 활성화 | channel status의 `account.jetstreamEnabled` | `true` | Stream 이하 |
 
 checker status API 성공은 내부 조회 성공이므로 정상 결과에는 출력하지 않는다.
 실패할 때만 checker access 문제로 표시한다.
@@ -477,8 +484,8 @@ checker status API 성공은 내부 조회 성공이므로 정상 결과에는 �
 | 검사 | 데이터 출처 | 통과 기준 |
 | --- | --- | --- |
 | 메시지 Publish 권한 | `action: send` channel address와 status `publishAllowed` | account 기본 Publish Allow에 포함되고 Deny에 포함되지 않음 |
-| Stream 존재 | `$JS.API.STREAM.INFO.<stream>` | API error가 없고 `config`가 존재 |
-| subject 저장 | `config.subjects` | channel address가 하나 이상의 NATS subject 패턴과 일치 |
+| Stream 존재 | Console의 account별 JetStream 조회 | Stream Info 오류가 없음 |
+| subject 저장 | Console의 `SubjectAllowed` 판정 | channel address가 하나 이상의 NATS subject 패턴과 일치 |
 
 NATS wildcard 판단:
 
@@ -589,9 +596,9 @@ NATS_CREDS=/path/to/asyncapi-checker.creds \
 
 | 구현 | 파일 |
 | --- | --- |
-| 검사 계획, NATS 요청, 결과 판단 | `asyncapi/check-channels.py` |
+| AsyncAPI 요청 생성과 결과 출력 | `asyncapi/check-channels.py` |
 | checker HTTP handlers | `api/internal/accounts/asyncapi_handler.go` |
-| checker claims와 status 판단 | `api/internal/accounts/asyncapi.go` |
+| checker claims, JetStream 조회와 channel 판단 | `api/internal/accounts/asyncapi.go` |
 | cross-account source export/import | `api/internal/accounts/source_sharing.go` |
 | custom status NATS responder | `api/internal/httpapi/server.go` |
 | HTTP routes | `api/internal/httpapi/routes.go` |
@@ -615,17 +622,17 @@ User JWT
 Account context
   같은 Stream 이름 중 어느 account의 Stream을 조회할지 결정
 
-Stream Info API
-  실제 Stream config를 반환
+Console checker service
+  account claims와 실제 JetStream config를 조회하고 선언을 판정
 
 check-channels.py
-  반환된 config와 AsyncAPI 선언을 비교
+  AsyncAPI 선언을 요청으로 변환하고 반환된 판정 결과를 출력
 ```
 
 ## Consumer declaration and check
 
 A receive operation declares its durable Consumer with x-jetstream-consumer.name. The initial naming convention is STREAM_CONSUMER, and channels consumed from the same Stream share one name.
 
-The checker validates account, JetStream, Stream, and Stream Source prerequisites first. It then requests checker.ACCOUNT.$JS.API.CONSUMER.INFO.STREAM.CONSUMER and passes only when the response contains the declared durable_name. Each account, Stream, and Consumer tuple is checked once.
+The checker service validates account, JetStream, Stream, and Stream Source prerequisites first. NATS Console then reads Consumer Info through its account-scoped JetStream connection and passes only when the response contains the declared durable name.
 
 The service account Import API action now manages both token-protected Stream Info and Consumer Info exports and imports, including checker publish permissions. Existing imports must be updated once and fresh checker credentials downloaded after introducing Consumer checks.

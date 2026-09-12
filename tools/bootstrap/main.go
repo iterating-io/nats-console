@@ -7,7 +7,7 @@
 //
 // Outputs:
 //   - deploy/auth.conf   (operator JWT + system account public key + resolver config)
-//   - .env              (API env vars including generated NATS credentials)
+//   - .envrc            (direnv settings including generated NATS credentials)
 //   - deploy/keys/      (NKey seed files for backup/re-signing)
 //
 // Usage:
@@ -125,21 +125,25 @@ resolver_preload: {
 `, operatorJWT, sysAccountPub, sysAccountPub, sysAccountJWT)
 	writeFile(filepath.Join(*outDir, "auth.conf"), []byte(authConf), 0644)
 
-	// --- Write root .env ---
+	// --- Write root .envrc ---
 	// Contains all local runtime settings plus the generated NATS credentials.
 	// Do NOT commit this file — it contains private NKey seeds.
-	envPath := filepath.Clean(filepath.Join(*outDir, "..", ".env"))
+	envPath := filepath.Clean(filepath.Join(*outDir, "..", ".envrc"))
 	envFile := fmt.Sprintf(`# API
-NATS_URL=nats://nats:4222
-ALLOWED_ORIGINS=http://localhost
-NATS_SYS_JWT=%s
-NATS_SYS_NKEY=%s
-OPERATOR_NKEY=%s
-ADMIN_ID=admin
-ADMIN_PASSWORD=admin
+export NATS_APP_URL=nats://nats:4222
+export NATS_SYS_JWT=%s
+export NATS_SYS_NKEY=%s
+export OPERATOR_NKEY=%s
+export ADMIN_ID=admin
+export ADMIN_PASSWORD=admin
+export ALLOWED_ORIGINS=http://localhost
 
 # WEB
-WEB_BASE_PATH=/
+export WEB_BASE_PATH=/
+
+# Local checker
+export NATS_URL=nats://localhost:4222
+export NATS_CREDS=./update-checker.creds
 `, sysUserJWT, string(sysAccountSeed), string(operatorSeed))
 	writeFile(envPath, []byte(envFile), 0600)
 
@@ -151,7 +155,7 @@ WEB_BASE_PATH=/
 
 	fmt.Println("Bootstrap complete.")
 	fmt.Printf("  auth.conf        : %s\n", filepath.Join(*outDir, "auth.conf"))
-	fmt.Printf("  .env             : %s\n", envPath)
+	fmt.Printf("  .envrc           : %s\n", envPath)
 	fmt.Printf("  keys/            : %s\n", keysDir)
 	fmt.Printf("  operator pub     : %s\n", operatorPub)
 	fmt.Printf("  sys account pub  : %s\n", sysAccountPub)

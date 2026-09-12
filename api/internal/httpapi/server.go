@@ -66,12 +66,34 @@ func (s *Server) SetNATSConn(nc natsClient) {
 func (s *Server) RegisterCheckerStatusService(nc *nats.Conn) error {
 	_, err := nc.Subscribe("nats.console.asyncapi.status", func(msg *nats.Msg) {
 		var request struct {
-			Account        string `json:"account"`
-			SourceTarget   string `json:"sourceTarget"`
-			PublishSubject string `json:"publishSubject"`
+			Account        string                           `json:"account"`
+			SourceTarget   string                           `json:"sourceTarget"`
+			PublishSubject string                           `json:"publishSubject"`
+			Channels       []accounts.CheckerChannelRequest `json:"channels"`
 		}
 		if err := json.Unmarshal(msg.Data, &request); err != nil {
 			_ = msg.Respond([]byte(`{"error":"invalid status request"}`))
+			return
+		}
+		if request.Channels != nil {
+			if len(request.Channels) == 0 || len(request.Channels) > 100 {
+				_ = msg.Respond([]byte(`{"error":"channels must contain between 1 and 100 declarations"}`))
+				return
+			}
+			statuses := make([]accounts.CheckerChannelStatus, 0, len(request.Channels))
+			for _, channel := range request.Channels {
+				status, checkErr := s.accountsService.CheckAsyncAPIChannel(channel)
+				if checkErr != nil {
+					data, _ := json.Marshal(map[string]string{"error": checkErr.Error()})
+					_ = msg.Respond(data)
+					return
+				}
+				statuses = append(statuses, status)
+			}
+			data, marshalErr := json.Marshal(map[string]any{"channels": statuses})
+			if marshalErr == nil {
+				_ = msg.Respond(data)
+			}
 			return
 		}
 		status, err := s.accountsService.CheckerAccountStatus(request.Account, request.SourceTarget, request.PublishSubject)

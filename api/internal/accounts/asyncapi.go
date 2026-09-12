@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	natsjwt "github.com/nats-io/jwt/v2"
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nkeys"
 
 	"github.com/iterating-io/nats-console/api/internal/store"
@@ -52,6 +53,185 @@ type CheckerSourceSharingStatus struct {
 	ConsumerAPIImportEnabled     bool `json:"consumerAPIImportEnabled"`
 	DeliverySubjectImportEnabled bool `json:"deliverySubjectImportEnabled"`
 	FlowControlImportEnabled     bool `json:"flowControlImportEnabled"`
+}
+
+// CheckerChannelRequest is the complete, declarative input needed by the
+// console to validate one AsyncAPI channel. The external checker deliberately
+// sends declarations rather than implementing NATS matching rules itself.
+type CheckerChannelRequest struct {
+	Account         string `json:"account"`
+	Stream          string `json:"stream"`
+	Subject         string `json:"subject"`
+	PublishRequired bool   `json:"publishRequired"`
+	Consumer        string `json:"consumer,omitempty"`
+	SourceAccount   string `json:"sourceAccount,omitempty"`
+	SourceStream    string `json:"sourceStream,omitempty"`
+	SourceFilter    string `json:"sourceFilter,omitempty"`
+}
+
+type CheckerChannelStatus struct {
+	Account           CheckerAccountStatus  `json:"account"`
+	SourceAccount     *CheckerAccountStatus `json:"sourceAccount,omitempty"`
+	TargetStream      bool                  `json:"targetStream"`
+	SubjectCovered    *bool                 `json:"subjectCovered,omitempty"`
+	ConsumerReady     *bool                 `json:"consumerReady,omitempty"`
+	SourceStream      *bool                 `json:"sourceStream,omitempty"`
+	SourceConnected   *bool                 `json:"sourceConnected,omitempty"`
+	SourceFilter      *bool                 `json:"sourceFilter,omitempty"`
+	TargetStreamError string                `json:"targetStreamError,omitempty"`
+	SourceStreamError string                `json:"sourceStreamError,omitempty"`
+	ConsumerError     string                `json:"consumerError,omitempty"`
+}
+
+// CheckAsyncAPIChannel performs all NATS-specific inspection and matching in
+// nats-console. Callers only provide the AsyncAPI declaration and render the
+// returned facts.
+func (s *Service) CheckAsyncAPIChannel(request CheckerChannelRequest) (CheckerChannelStatus, error) {
+	request.Account = strings.TrimSpace(request.Account)
+	request.Stream = strings.TrimSpace(request.Stream)
+	request.Subject = strings.TrimSpace(request.Subject)
+	if request.Account == "" || request.Stream == "" || request.Subject == "" {
+		return CheckerChannelStatus{}, fmt.Errorf("account, stream, and subject are required")
+	}
+	account, err := s.CheckerAccountStatus(request.Account, "", func() string {
+		if request.PublishRequired {
+			return request.Subject
+		}
+		return ""
+	}())
+	if err != nil {
+		return CheckerChannelStatus{}, err
+	}
+	result := CheckerChannelStatus{Account: account}
+	if !account.Exists || !account.JetStreamEnabled {
+		return result, nil
+	}
+
+	js, closeConn, err := s.checkerJetStream(request.Account)
+	if err != nil {
+		result.TargetStreamError = err.Error()
+		return result, nil
+	}
+	defer closeConn()
+	info, err := js.StreamInfo(request.Stream)
+	if err != nil {
+		result.TargetStreamError = err.Error()
+		return result, nil
+	}
+	result.TargetStream = true
+
+	if request.SourceAccount == "" {
+		covered := SubjectAllowed(request.Subject, info.Config.Subjects)
+		result.SubjectCovered = &covered
+	} else {
+		sourceStatus, statusErr := s.CheckerAccountStatus(request.SourceAccount, request.Account, "")
+		if statusErr != nil {
+			return CheckerChannelStatus{}, statusErr
+		}
+		result.SourceAccount = &sourceStatus
+		exists := false
+		if sourceStatus.Exists && sourceStatus.JetStreamEnabled {
+			sourceJS, closeSource, sourceErr := s.checkerJetStream(request.SourceAccount)
+			if sourceErr != nil {
+				result.SourceStreamError = sourceErr.Error()
+			} else {
+				_, sourceErr = sourceJS.StreamInfo(request.SourceStream)
+				closeSource()
+				if sourceErr == nil {
+					exists = true
+				} else {
+					result.SourceStreamError = sourceErr.Error()
+				}
+			}
+		}
+		result.SourceStream = &exists
+		connected, filterMatches := false, false
+		candidates := append([]*nats.StreamSource{}, info.Config.Sources...)
+		if info.Config.Mirror != nil {
+			candidates = append(candidates, info.Config.Mirror)
+		}
+		for _, candidate := range candidates {
+			if candidate != nil && candidate.Name == request.SourceStream {
+				connected = true
+				if candidate.FilterSubject == request.SourceFilter {
+					filterMatches = true
+				}
+			}
+		}
+		result.SourceConnected, result.SourceFilter = &connected, &filterMatches
+	}
+
+	if request.Consumer != "" {
+		ready := false
+		consumer, consumerErr := js.ConsumerInfo(request.Stream, request.Consumer)
+		if consumerErr == nil {
+			ready = consumer.Config.Durable == request.Consumer
+		} else {
+			result.ConsumerError = consumerErr.Error()
+		}
+		result.ConsumerReady = &ready
+	}
+	return result, nil
+}
+
+func (s *Service) checkerJetStream(accountName string) (nats.JetStreamContext, func(), error) {
+	account, found := s.repo.FindByName(singleOperator(s.repo), strings.TrimSpace(accountName))
+	if !found || account.IsSystem {
+		return nil, nil, fmt.Errorf("account not found")
+	}
+	key, err := s.store.GetAccountSigningKey(account.Operator, account.PublicKey)
+	if err != nil {
+		return nil, nil, fmt.Errorf("account signing key unavailable: %w", err)
+	}
+	accountKP, err := nkeys.FromSeed([]byte(key.Seed))
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid account signing key: %w", err)
+	}
+	userKP, err := nkeys.CreateUser()
+	if err != nil {
+		return nil, nil, err
+	}
+	userPublic, err := userKP.PublicKey()
+	if err != nil {
+		return nil, nil, err
+	}
+	claims := natsjwt.NewUserClaims(userPublic)
+	claims.Name = "nats-console-asyncapi-check"
+	signerPublic, err := accountKP.PublicKey()
+	if err != nil {
+		return nil, nil, err
+	}
+	if signerPublic != account.PublicKey {
+		claims.IssuerAccount = account.PublicKey
+	}
+	claims.IssuedAt = time.Now().Unix()
+	userJWT, err := claims.Encode(accountKP)
+	if err != nil {
+		return nil, nil, err
+	}
+	userSeed, err := userKP.Seed()
+	if err != nil {
+		return nil, nil, err
+	}
+	nc, err := nats.Connect(s.cfg.NATSURL, nats.Name("nats-console-asyncapi-check"), nats.Timeout(10*time.Second), nats.UserJWT(
+		func() (string, error) { return userJWT, nil },
+		func(nonce []byte) ([]byte, error) {
+			kp, keyErr := nkeys.FromSeed(userSeed)
+			if keyErr != nil {
+				return nil, keyErr
+			}
+			return kp.Sign(nonce)
+		},
+	))
+	if err != nil {
+		return nil, nil, fmt.Errorf("connect to account: %w", err)
+	}
+	js, err := nc.JetStream()
+	if err != nil {
+		nc.Close()
+		return nil, nil, fmt.Errorf("jetstream unavailable: %w", err)
+	}
+	return js, nc.Close, nil
 }
 
 func (s *Service) CheckerAccountStatus(accountName, sourceTarget, publishSubject string) (CheckerAccountStatus, error) {

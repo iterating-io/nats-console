@@ -1,11 +1,36 @@
 package accounts
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	natsjwt "github.com/nats-io/jwt/v2"
 	"github.com/nats-io/nkeys"
 )
+
+func TestCheckAsyncAPIChannelRejectsIncompleteDeclaration(t *testing.T) {
+	service := &Service{}
+	_, err := service.CheckAsyncAPIChannel(CheckerChannelRequest{Account: "blog", Stream: "BLOG_EVENTS"})
+	if err == nil || !strings.Contains(err.Error(), "account, stream, and subject") {
+		t.Fatalf("error = %v, want required declaration fields", err)
+	}
+}
+
+func TestCheckerChannelRequestJSONContract(t *testing.T) {
+	data, err := json.Marshal(CheckerChannelRequest{
+		Account: "eventpipe", Stream: "EVENTPIPE_INBOX", Subject: "blog.draft.created",
+		SourceAccount: "blog", SourceStream: "BLOG_EVENTS", SourceFilter: "blog.draft.created",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{`"account"`, `"stream"`, `"subject"`, `"sourceAccount"`, `"sourceStream"`, `"sourceFilter"`} {
+		if !strings.Contains(string(data), field) {
+			t.Fatalf("request JSON %s is missing %s", data, field)
+		}
+	}
+}
 
 func TestAsyncAPIAliasUsesAccountNameAsOneSafeSubjectToken(t *testing.T) {
 	got := asyncAPIAlias("orders.eu/prod")

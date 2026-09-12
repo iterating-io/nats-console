@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate AsyncAPI channel declarations against read-only NATS checker APIs."""
+"""Validate AsyncAPI declarations using the nats-console checker service."""
 
 from __future__ import annotations
 
@@ -27,11 +27,11 @@ class Channel:
     account: str
     stream: str
     subject: str
+    publish_required: bool = False
+    consumer: str = ""
     source_account: str = ""
     source_stream: str = ""
     source_filter: str = ""
-    publish_required: bool = False
-    consumer: str = ""
 
 
 @dataclass
@@ -41,469 +41,6 @@ class Result:
     target: str
     status: str
     action: str = "-"
-
-
-class Checker:
-    def __init__(self, server: str, creds: str, timeout: str, channels: list[Channel]) -> None:
-        self.server = server
-        self.creds = creds
-        self.timeout = timeout
-        self.channels = channels
-        self.results: list[Result] = []
-        self.failed = False
-        self.account_cache: dict[str, bool] = {}
-        self.stream_cache: dict[tuple[str, str], dict[str, Any] | None] = {}
-        self.source_cache: dict[tuple[str, str], bool] = {}
-        self.subject_checked: set[tuple[str, str, str]] = set()
-        self.publish_checked: set[tuple[str, str]] = set()
-        self.source_connection_checked: set[tuple[str, str, str, str]] = set()
-        self.source_filter_checked: set[tuple[str, str, str, str, str]] = set()
-        self.skipped_source_setup: set[tuple[str, str]] = set()
-        self.consumer_accounts = {channel.account for channel in channels if channel.consumer}
-        self.consumer_access: dict[str, bool] = {}
-        self.consumer_checked: set[tuple[str, str, str]] = set()
-
-    def add(self, group: str, description: str, target: str, status: str, action: str = "-") -> None:
-        self.results.append(Result(group, description, target, status, action.replace("\t", " ").replace("\n", " ")))
-        if status == "실패":
-            self.failed = True
-
-    def skip(self, group: str, description: str, target: str, reason: str) -> None:
-        self.add(group, description, target, "건너뜀", reason)
-
-    def request_json(self, subject: str, payload: str = "") -> dict[str, Any]:
-        command = [
-            "nats", "--server", self.server, "--creds", self.creds,
-            "request", "--raw", "--timeout", self.timeout, subject, payload,
-        ]
-        completed = subprocess.run(command, text=True, capture_output=True, check=False)
-        raw = completed.stdout.strip()
-        if completed.returncode:
-            detail = (completed.stderr or completed.stdout).strip().splitlines()
-            raise RuntimeError(detail[0] if detail else "request failed")
-        if not raw:
-            raise RuntimeError("checker 응답이 없습니다")
-        try:
-            value = json.loads(raw)
-        except json.JSONDecodeError as error:
-            raise RuntimeError(f"invalid JSON response: {error}") from error
-        if not isinstance(value, dict):
-            raise RuntimeError("response is not a JSON object")
-        error = value.get("error")
-        if error:
-            if isinstance(error, dict):
-                raise RuntimeError(str(error.get("description") or error.get("message") or error))
-            raise RuntimeError(str(error))
-        return value
-
-    @staticmethod
-    def require_bools(value: dict[str, Any], fields: tuple[str, ...], context: str) -> None:
-        if any(not isinstance(value.get(field), bool) for field in fields):
-            raise RuntimeError(f"{context} response is missing required boolean fields")
-
-    def ensure_account(self, account: str) -> bool:
-        if account in self.account_cache:
-            return self.account_cache[account]
-        try:
-            status = self.request_json(STATUS_SUBJECT, json.dumps({"account": account}, separators=(",", ":")))
-            fields = ["exists", "jetstreamEnabled", "streamInfoImportEnabled"]
-            if account in self.consumer_accounts:
-                fields.append("consumerInfoImportEnabled")
-            self.require_bools(status, tuple(fields), "status")
-        except RuntimeError as error:
-            self.add(account, "checker 상태 API 연결", account, "실패",
-                     f"NATS Console의 AsyncAPI에서 Update checker access를 실행하고 새 checker credentials로 교체하세요. 상세: {error}")
-            self.skip(account, "서비스 account 확인", account, "account 상태 조회 실패로 확인하지 않습니다.")
-            self.skip(account, "JetStream 활성화", account, "account 상태 조회 실패로 확인하지 않습니다.")
-            self.skip(account, "checker Stream Info 연결", account, "account 상태 조회 실패로 확인하지 않습니다.")
-            if account in self.consumer_accounts:
-                self.skip(account, "checker Consumer Info 연결", account, "account 상태 조회 실패로 확인하지 않습니다.")
-                self.consumer_access[account] = False
-            self.account_cache[account] = False
-            return False
-
-        if not status["exists"]:
-            self.add(account, "서비스 account 확인", account, "실패", f"NATS Console에서 {account} account를 생성하세요.")
-            self.skip(account, "JetStream 활성화", account, "서비스 account가 없어 확인하지 않습니다.")
-            self.skip(account, "checker Stream Info 연결", account, "서비스 account가 없어 확인하지 않습니다.")
-            if account in self.consumer_accounts:
-                self.skip(account, "checker Consumer Info 연결", account, "서비스 account가 없어 확인하지 않습니다.")
-                self.consumer_access[account] = False
-            self.account_cache[account] = False
-            return False
-        self.add(account, "서비스 account 확인", account, "통과")
-
-        if not status["jetstreamEnabled"]:
-            self.add(account, "JetStream 활성화", account, "실패", f"{account} account에서 JetStream을 활성화하세요.")
-            self.skip(account, "checker Stream Info 연결", account, "JetStream 비활성화로 확인하지 않습니다.")
-            if account in self.consumer_accounts:
-                self.skip(account, "checker Consumer Info 연결", account, "JetStream 비활성화로 확인하지 않습니다.")
-                self.consumer_access[account] = False
-            self.account_cache[account] = False
-            return False
-        self.add(account, "JetStream 활성화", account, "통과")
-
-        if not status["streamInfoImportEnabled"]:
-            self.add(account, "checker Stream Info 연결", account, "실패",
-                     f"NATS Console의 AsyncAPI에서 {account} account Import API를 활성화하고 새 checker credentials로 교체하세요.")
-            self.account_cache[account] = False
-            return False
-        self.add(account, "checker Stream Info 연결", account, "통과")
-        if account in self.consumer_accounts:
-            allowed = status["consumerInfoImportEnabled"]
-            self.consumer_access[account] = allowed
-            self.add(account, "checker Consumer Info 연결", account,
-                     "통과" if allowed else "실패",
-                     "-" if allowed else f"NATS Console의 AsyncAPI에서 {account} account Import API를 갱신하고 새 checker credentials로 교체하세요.")
-        self.account_cache[account] = True
-        return True
-
-    def check_publish_permission(self, channel: Channel) -> None:
-        key = (channel.account, channel.subject)
-        if key in self.publish_checked:
-            return
-        self.publish_checked.add(key)
-        target = f"{channel.account} / {channel.subject}"
-        payload = {"account": channel.account, "publishSubject": channel.subject}
-        try:
-            status = self.request_json(STATUS_SUBJECT, json.dumps(payload, separators=(",", ":")))
-            self.require_bools(status, ("exists", "publishAllowed"), "publish status")
-        except RuntimeError as error:
-            self.add(channel.account, "메시지 Publish 권한", target, "실패",
-                     f"account Publish 권한을 조회하지 못했습니다: {error}")
-            return
-        passed = status["publishAllowed"]
-        self.add(
-            channel.account, "메시지 Publish 권한", target,
-            "통과" if passed else "실패",
-            "-" if passed else (
-                f"NATS Console의 Accounts에서 {channel.account} account Publish permissions에 "
-                f"{channel.subject}를 추가하고 Deny 규칙도 확인하세요."
-            ),
-        )
-
-    def skip_publish_permission(self, channel: Channel, reason: str) -> None:
-        key = (channel.account, channel.subject)
-        if key not in self.publish_checked:
-            self.publish_checked.add(key)
-            self.skip(channel.account, "메시지 Publish 권한",
-                      f"{channel.account} / {channel.subject}", reason)
-
-    def ensure_stream(self, group: str, account: str, stream: str) -> dict[str, Any] | None:
-        key = (account, stream)
-        if key in self.stream_cache:
-            return self.stream_cache[key]
-        try:
-            value = self.request_json(f"checker.{account}.$JS.API.STREAM.INFO.{stream}")
-            config = value.get("config")
-            if not isinstance(config, dict):
-                raise RuntimeError("Stream Info 응답에 config가 없습니다")
-        except RuntimeError as error:
-            self.add(group, "Stream 존재", f"{account} / {stream}", "실패", f"Stream Info를 조회하지 못했습니다: {error}")
-            self.stream_cache[key] = None
-            return None
-        self.add(group, "Stream 존재", f"{account} / {stream}", "통과")
-        self.stream_cache[key] = value
-        return value
-
-    def skip_consumer(self, channel: Channel, reason: str) -> None:
-        if not channel.consumer:
-            return
-        key = (channel.account, channel.stream, channel.consumer)
-        if key not in self.consumer_checked:
-            self.consumer_checked.add(key)
-            self.skip(channel.account, "Consumer 준비", f"{channel.account} / {channel.stream} / {channel.consumer}", reason)
-
-    def check_consumer(self, channel: Channel) -> None:
-        if not channel.consumer:
-            return
-        key = (channel.account, channel.stream, channel.consumer)
-        if key in self.consumer_checked:
-            return
-        self.consumer_checked.add(key)
-        target = f"{channel.account} / {channel.stream} / {channel.consumer}"
-        if not self.consumer_access.get(channel.account, False):
-            self.skip(channel.account, "Consumer 준비", target, "checker Consumer Info 연결이 없어 확인하지 않습니다.")
-            return
-        try:
-            value = self.request_json(f"checker.{channel.account}.$JS.API.CONSUMER.INFO.{channel.stream}.{channel.consumer}")
-            config = value.get("config")
-            if not isinstance(config, dict):
-                raise RuntimeError("Consumer Info 응답에 config가 없습니다")
-            if config.get("durable_name") != channel.consumer:
-                raise RuntimeError("선언한 durable 이름과 실제 Consumer 이름이 다릅니다")
-        except RuntimeError as error:
-            self.add(channel.account, "Consumer 준비", target, "실패", f"NATS Console의 {channel.account} account / {channel.stream}에서 {channel.consumer} Consumer를 생성하세요. 상세: {error}")
-            return
-        self.add(channel.account, "Consumer 준비", target, "통과")
-
-    def source_setup_target(self, channel: Channel, description: str) -> str:
-        if description in {
-            "checker source 상태 API 연결",
-            "원본 account 확인",
-            "원본 JetStream 활성화",
-            "Stream Source 제공 허용",
-            "Stream Source 원본 export",
-        }:
-            return channel.source_account
-        if description in {"대상 account 확인", "Stream Source 대상 import"}:
-            return channel.account
-        return self.source_connection_target(channel)
-
-    def skip_source_setup(self, channel: Channel, reason: str) -> None:
-        relation = (channel.source_account, channel.account)
-        if relation in self.skipped_source_setup:
-            return
-        self.skipped_source_setup.add(relation)
-        for description in (
-            "checker source 상태 API 연결", "원본 account 확인", "원본 JetStream 활성화",
-            "대상 account 확인", "Stream Source 제공 허용", "Stream Source 원본 export",
-            "Stream Source 대상 import", "Stream Source account 연결 설정",
-        ):
-            self.skip(
-                channel.account, description,
-                self.source_setup_target(channel, description), reason,
-            )
-
-    def ensure_source_setup(self, channel: Channel) -> bool:
-        key = (channel.source_account, channel.account)
-        if key in self.source_cache:
-            return self.source_cache[key]
-        payload = {"account": channel.source_account, "sourceTarget": channel.account}
-        try:
-            status = self.request_json(STATUS_SUBJECT, json.dumps(payload, separators=(",", ":")))
-            self.require_bools(status, ("exists", "jetstreamEnabled"), "source status")
-            sharing = status.get("sourceSharing")
-            fields = (
-                "targetExists", "sourceSharingEnabled", "sourceExportsEnabled",
-                "consumerAPIImportEnabled", "deliverySubjectImportEnabled",
-                "flowControlImportEnabled",
-            )
-            if not isinstance(sharing, dict):
-                raise RuntimeError("source status response is missing source-sharing fields")
-            self.require_bools(sharing, fields, "source status")
-        except RuntimeError as error:
-            description = "checker source 상태 API 연결"
-            self.add(
-                channel.account, description,
-                self.source_setup_target(channel, description), "실패",
-                f"NATS Console의 AsyncAPI에서 Update checker access를 실행하고 "
-                f"새 checker credentials로 교체하세요. 상세: {error}",
-            )
-            for description in (
-                "원본 account 확인", "원본 JetStream 활성화", "대상 account 확인",
-                "Stream Source 제공 허용", "Stream Source 원본 export",
-                "Stream Source 대상 import", "Stream Source account 연결 설정",
-            ):
-                self.skip(
-                    channel.account, description,
-                    self.source_setup_target(channel, description),
-                    "공유 상태 조회 실패로 확인하지 않습니다.",
-                )
-            self.source_cache[key] = False
-            return False
-
-        checks = [
-            ("원본 account 확인", status["exists"], f"NATS Console에서 {channel.source_account} account를 생성하세요."),
-            ("원본 JetStream 활성화", status["jetstreamEnabled"], f"{channel.source_account} account에서 JetStream을 활성화하세요."),
-            ("대상 account 확인", sharing["targetExists"], f"NATS Console에서 {channel.account} account를 생성하세요."),
-            ("Stream Source 제공 허용", sharing["sourceSharingEnabled"], f"NATS Console에서 {channel.source_account} account의 Stream Source 공유를 활성화하세요."),
-            ("Stream Source 원본 export", sharing["sourceExportsEnabled"], f"{channel.source_account} account의 source API, delivery, flow-control export를 갱신하세요. NATS Console의 Accounts에서 {channel.source_account}가 Allow as source 상태인지 확인한 뒤, {channel.account}의 Source sharing에서 {channel.source_account}를 선택하고 Add source account를 실행하세요."),
-            ("Stream Source 대상 import", all(sharing[name] for name in fields[3:]), f"{channel.account} account에서 {channel.source_account}를 Add source account로 다시 추가하세요."),
-        ]
-        ready = True
-        for description, passed, action in checks:
-            self.add(
-                channel.account, description,
-                self.source_setup_target(channel, description),
-                "통과" if passed else "실패", "-" if passed else action,
-            )
-            ready = ready and passed
-        description = "Stream Source account 연결 설정"
-        self.add(
-            channel.account, description,
-            self.source_setup_target(channel, description),
-            "통과" if ready else "실패",
-            "-" if ready else "실패한 source 공유 설정을 먼저 해결하세요.",
-        )
-        self.source_cache[key] = ready
-        return ready
-
-    @staticmethod
-    def subject_matches(pattern: str, subject: str) -> bool:
-        pattern_tokens = pattern.split(".")
-        subject_tokens = subject.split(".")
-        index = 0
-        for position, token in enumerate(pattern_tokens):
-            if token == ">":
-                return position == len(pattern_tokens) - 1 and index < len(subject_tokens)
-            if index >= len(subject_tokens) or (token != "*" and token != subject_tokens[index]):
-                return False
-            index += 1
-        return index == len(subject_tokens)
-
-    def check_channel(self, channel: Channel) -> None:
-        if not self.ensure_account(channel.account):
-            if channel.publish_required:
-                self.skip_publish_permission(channel, "대상 account가 준비되지 않아 확인하지 않습니다.")
-            self.skip_dependents(channel, "대상 account가 준비되지 않아 확인하지 않습니다.")
-            return
-        if channel.publish_required:
-            self.check_publish_permission(channel)
-        target_info = self.ensure_stream(channel.account, channel.account, channel.stream)
-        if target_info is None:
-            if channel.source_stream:
-                self.skip_source_setup(channel, "대상 Stream이 없어 source 설정을 확인하지 않습니다.")
-                self.skip_source_link(channel, "대상 Stream이 없어 확인하지 않습니다.")
-            else:
-                self.skip_subject(channel, "대상 Stream이 없어 확인하지 않습니다.")
-            self.skip_consumer(channel, "대상 Stream이 없어 확인하지 않습니다.")
-            return
-
-        if not channel.source_stream:
-            self.check_subject(channel, target_info)
-            self.check_consumer(channel)
-            return
-
-        if not self.ensure_account(channel.source_account):
-            self.skip_source_setup(channel, "원본 account가 준비되지 않아 source 설정을 확인하지 않습니다.")
-            self.skip_source_link(channel, "원본 account가 준비되지 않아 확인하지 않습니다.")
-            self.skip_consumer(channel, "원본 account가 준비되지 않아 확인하지 않습니다.")
-            return
-        if self.ensure_stream(channel.account, channel.source_account, channel.source_stream) is None:
-            self.skip_source_setup(channel, "원본 Stream이 없어 source 설정을 확인하지 않습니다.")
-            self.skip_source_link(channel, "원본 Stream이 없어 확인하지 않습니다.")
-            self.skip_consumer(channel, "원본 Stream이 없어 확인하지 않습니다.")
-            return
-        if not self.ensure_source_setup(channel):
-            self.skip_source_link(channel, "Stream Source account 연결 설정 실패로 확인하지 않습니다.")
-            self.skip_consumer(channel, "Stream Source account 연결 설정 실패로 확인하지 않습니다.")
-            return
-        self.check_source_link(channel, target_info)
-        self.check_consumer(channel)
-
-    def skip_dependents(self, channel: Channel, reason: str) -> None:
-        key = (channel.account, channel.stream)
-        if key not in self.stream_cache:
-            self.skip(channel.account, "Stream 존재", f"{channel.account} / {channel.stream}", reason)
-            self.stream_cache[key] = None
-        if channel.source_stream:
-            self.skip_source_setup(channel, reason)
-            self.skip_source_link(channel, reason)
-        else:
-            self.skip_subject(channel, reason)
-        self.skip_consumer(channel, reason)
-
-    def skip_subject(self, channel: Channel, reason: str) -> None:
-        key = (channel.account, channel.stream, channel.subject)
-        if key not in self.subject_checked:
-            self.subject_checked.add(key)
-            self.skip(channel.account, "이벤트를 저장할 Stream 준비",
-                      f"{channel.account} / {channel.stream} / {channel.subject}", reason)
-
-    def check_subject(self, channel: Channel, info: dict[str, Any]) -> None:
-        key = (channel.account, channel.stream, channel.subject)
-        if key in self.subject_checked:
-            return
-        self.subject_checked.add(key)
-        patterns = info.get("config", {}).get("subjects") or []
-        passed = any(isinstance(pattern, str) and self.subject_matches(pattern, channel.subject) for pattern in patterns)
-        self.add(channel.account, "이벤트를 저장할 Stream 준비",
-                 f"{channel.account} / {channel.stream} / {channel.subject}",
-                 "통과" if passed else "실패",
-                 "-" if passed else f"{channel.account} account의 {channel.stream} subject에 {channel.subject}를 추가하세요.")
-
-    def source_connection_target(self, channel: Channel) -> str:
-        return (
-            f"{channel.source_account} / {channel.source_stream} <- "
-            f"{channel.account} / {channel.stream}"
-        )
-
-    def source_filter_target(self, channel: Channel) -> str:
-        return f"{self.source_connection_target(channel)} [filter: {channel.source_filter}]"
-
-    def skip_source_link(self, channel: Channel, reason: str) -> None:
-        connection_key = (channel.account, channel.stream, channel.source_account, channel.source_stream)
-        filter_key = (*connection_key, channel.source_filter)
-        if connection_key not in self.source_connection_checked:
-            self.source_connection_checked.add(connection_key)
-            self.skip(channel.account, "Stream Source 연결", self.source_connection_target(channel), reason)
-        if filter_key not in self.source_filter_checked:
-            self.source_filter_checked.add(filter_key)
-            self.skip(channel.account, "Stream Source filter", self.source_filter_target(channel), reason)
-
-    def check_source_link(self, channel: Channel, info: dict[str, Any]) -> None:
-        connection_key = (channel.account, channel.stream, channel.source_account, channel.source_stream)
-        filter_key = (*connection_key, channel.source_filter)
-        if filter_key in self.source_filter_checked:
-            return
-        self.source_filter_checked.add(filter_key)
-        config = info.get("config", {})
-        candidates = [
-            item for item in config.get("sources") or []
-            if isinstance(item, dict) and item.get("name") == channel.source_stream
-        ]
-        mirror = config.get("mirror")
-        if isinstance(mirror, dict) and mirror.get("name") == channel.source_stream:
-            candidates.append(mirror)
-
-        if not candidates:
-            if connection_key not in self.source_connection_checked:
-                self.source_connection_checked.add(connection_key)
-                self.add(
-                    channel.account, "Stream Source 연결",
-                    self.source_connection_target(channel), "실패",
-                    f"{channel.account} account의 {channel.stream}에 "
-                    f"{channel.source_account} / {channel.source_stream}를 Stream Source로 연결하세요.",
-                )
-            self.skip(
-                channel.account, "Stream Source filter", self.source_filter_target(channel),
-                "Stream Source가 연결되지 않아 filter를 확인하지 않습니다.",
-            )
-            return
-
-        if connection_key not in self.source_connection_checked:
-            self.source_connection_checked.add(connection_key)
-            self.add(
-                channel.account, "Stream Source 연결",
-                self.source_connection_target(channel), "통과",
-            )
-        passed = any(item.get("filter_subject") == channel.source_filter for item in candidates)
-        self.add(
-            channel.account, "Stream Source filter", self.source_filter_target(channel),
-            "통과" if passed else "실패",
-            "-" if passed else (
-                f"{channel.account} account의 {channel.stream} Stream Source filter를 "
-                f"{channel.source_filter}로 설정하세요."
-            ),
-        )
-
-    def run(self) -> int:
-        for channel in self.channels:
-            self.check_channel(channel)
-        self.print_results()
-        if self.failed:
-            print("하나 이상의 AsyncAPI Stream 검사가 실패했습니다.", file=sys.stderr)
-            return 1
-        selected = os.getenv("NATS_ACCOUNT", "")
-        print(f"All AsyncAPI channels for {selected} are ready." if selected else "All AsyncAPI channels are ready.")
-        return 0
-
-    def print_results(self) -> None:
-        colors = {"통과": "\033[32m", "실패": "\033[31m", "건너뜀": "\033[33m"} if sys.stdout.isatty() else {}
-        reset = "\033[0m" if colors else ""
-        current = ""
-        for result in self.results:
-            if result.group != current:
-                if current:
-                    print()
-                print(f"[{result.group}]")
-                current = result.group
-            color = colors.get(result.status, "")
-            print(f"  [{color}{result.status}{reset}] {result.description}")
-            print(f"       대상: {result.target}")
-            if result.action != "-":
-                print(f"       조치: {result.action}")
 
 
 def discover_channels(selected: str) -> list[Channel]:
@@ -523,38 +60,30 @@ def discover_channels(selected: str) -> list[Channel]:
         if len(server_accounts) != 1:
             raise RuntimeError(f"{path.name}: expected exactly one x-nats-account")
         account = next(iter(server_accounts))
-        send_channels: set[str] = set()
-        for operation_name, operation in (document.get("operations") or {}).items():
-            if not isinstance(operation, dict):
-                raise RuntimeError(f"{path.name}: operation {operation_name!r} must be an object")
-            if operation.get("action") != "send":
-                continue
-            channel_ref = operation.get("channel")
-            if not isinstance(channel_ref, dict) or not isinstance(channel_ref.get("$ref"), str):
-                raise RuntimeError(f"{path.name}: send operation {operation_name!r} must reference a channel")
-            ref = channel_ref["$ref"]
-            prefix = "#/channels/"
-            if not ref.startswith(prefix) or not ref[len(prefix):]:
-                raise RuntimeError(f"{path.name}: send operation {operation_name!r} must use a local channel reference")
-            send_channels.add(ref[len(prefix):])
+        sends: set[str] = set()
         consumers: dict[str, str] = {}
-        for operation in (document.get("operations") or {}).values():
-            if not isinstance(operation, dict) or operation.get("action") != "receive":
+        for name, operation in (document.get("operations") or {}).items():
+            if not isinstance(operation, dict):
+                raise RuntimeError(f"{path.name}: operation {name!r} must be an object")
+            action = operation.get("action")
+            if action not in ("send", "receive"):
                 continue
-            channel_ref = operation.get("channel")
-            extension = operation.get("x-jetstream-consumer")
-            if not isinstance(channel_ref, dict) or not isinstance(channel_ref.get("$ref"), str):
-                raise RuntimeError("receive operation must reference a channel")
-            if not isinstance(extension, dict) or not isinstance(extension.get("name"), str) or not extension["name"]:
-                raise RuntimeError("receive operation has no x-jetstream-consumer.name")
-            prefix = "#" + chr(47) + "channels" + chr(47)
-            ref = channel_ref["$ref"]
-            if not ref.startswith(prefix) or not ref[len(prefix):]:
-                raise RuntimeError("receive operation must use a local channel reference")
+            ref_value = operation.get("channel")
+            ref = ref_value.get("$ref") if isinstance(ref_value, dict) else None
+            prefix = "#/channels/"
+            if not isinstance(ref, str) or not ref.startswith(prefix) or not ref[len(prefix):]:
+                raise RuntimeError(f"{path.name}: operation {name!r} must reference a local channel")
             channel_name = ref[len(prefix):]
-            if channel_name in consumers and consumers[channel_name] != extension["name"]:
-                raise RuntimeError("channel declares conflicting Consumer names")
-            consumers[channel_name] = extension["name"]
+            if action == "send":
+                sends.add(channel_name)
+                continue
+            extension = operation.get("x-jetstream-consumer")
+            consumer = extension.get("name") if isinstance(extension, dict) else None
+            if not isinstance(consumer, str) or not consumer:
+                raise RuntimeError(f"{path.name}: receive operation {name!r} has no x-jetstream-consumer.name")
+            if channel_name in consumers and consumers[channel_name] != consumer:
+                raise RuntimeError(f"{path.name}: channel {channel_name!r} declares conflicting Consumer names")
+            consumers[channel_name] = consumer
         for name, value in (document.get("channels") or {}).items():
             if not isinstance(value, dict):
                 raise RuntimeError(f"{path.name}: channel {name!r} must be an object")
@@ -564,31 +93,116 @@ def discover_channels(selected: str) -> list[Channel]:
             if not isinstance(jetstream, dict):
                 raise RuntimeError(f"{path.name}: channel {name!r} has invalid x-jetstream")
             subject, stream = value.get("address"), jetstream.get("stream")
-            if not isinstance(subject, str) or not subject:
-                raise RuntimeError(f"{path.name}: channel {name!r} has no address")
-            if not isinstance(stream, str) or not stream:
-                raise RuntimeError(f"{path.name}: channel {name!r} has no x-jetstream.stream")
+            if not isinstance(subject, str) or not subject or not isinstance(stream, str) or not stream:
+                raise RuntimeError(f"{path.name}: channel {name!r} requires address and x-jetstream.stream")
             source = value.get("x-source") or {}
             if not isinstance(source, dict):
                 raise RuntimeError(f"{path.name}: channel {name!r} has invalid x-source")
             source_account = source.get("account", "")
             source_stream = source.get("stream", "")
             source_filter = source.get("filterSubject", "")
+            if not all(isinstance(item, str) for item in (source_account, source_stream, source_filter)):
+                raise RuntimeError(f"{path.name}: channel {name!r} has non-string x-source fields")
             if bool(source_account) != bool(source_stream):
                 raise RuntimeError(f"{path.name}: channel {name!r} must declare both x-source.account and x-source.stream")
-            if source_account and (not isinstance(source_filter, str) or not source_filter):
+            if source_account and not source_filter:
                 raise RuntimeError(f"{path.name}: channel {name!r} must declare x-source.filterSubject")
             if not source_account and source_filter:
                 raise RuntimeError(f"{path.name}: channel {name!r} declares filterSubject without an x-source")
             if not selected or selected in (account, source_account):
-                channels.add(Channel(account, stream, subject, source_account, source_stream, source_filter, name in send_channels, consumers.get(name, "")))
+                channels.add(Channel(account, stream, subject, name in sends, consumers.get(name, ""), source_account, source_stream, source_filter))
     if selected and selected not in accounts:
-        names = ", ".join(sorted(accounts)) or "none"
-        raise RuntimeError(f"unknown NATS_ACCOUNT={selected!r}; declared accounts: {names}")
+        raise RuntimeError(f"unknown NATS_ACCOUNT={selected!r}; declared accounts: {', '.join(sorted(accounts)) or 'none'}")
     if not channels:
-        suffix = f" for NATS_ACCOUNT={selected}" if selected else ""
-        raise RuntimeError(f"no JetStream channels found{suffix}")
+        raise RuntimeError(f"no JetStream channels{' for NATS_ACCOUNT=' + selected if selected else ''}")
     return sorted(channels)
+
+
+def request_checks(server: str, creds: str, timeout: str, channels: list[Channel]) -> list[dict[str, Any]]:
+    payload = {"channels": [{
+        "account": item.account, "stream": item.stream, "subject": item.subject,
+        "publishRequired": item.publish_required, "consumer": item.consumer,
+        "sourceAccount": item.source_account, "sourceStream": item.source_stream,
+        "sourceFilter": item.source_filter,
+    } for item in channels]}
+    command = ["nats", "--server", server, "--creds", creds, "request", "--raw", "--timeout", timeout, STATUS_SUBJECT, json.dumps(payload, separators=(",", ":"))]
+    completed = subprocess.run(command, text=True, capture_output=True, check=False)
+    if completed.returncode:
+        detail = (completed.stderr or completed.stdout).strip().splitlines()
+        raise RuntimeError(detail[0] if detail else "checker request failed")
+    try:
+        response = json.loads(completed.stdout.strip())
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"invalid checker JSON response: {error}") from error
+    if not isinstance(response, dict):
+        raise RuntimeError("checker response is not an object")
+    if response.get("error"):
+        if response["error"] == "account status unavailable":
+            raise RuntimeError(
+                "the connected nats-console API does not support channel checks; "
+                "deploy or restart it with this branch, then run Update checker access"
+            )
+        raise RuntimeError(str(response["error"]))
+    statuses = response.get("channels")
+    if not isinstance(statuses, list) or len(statuses) != len(channels) or not all(isinstance(item, dict) for item in statuses):
+        raise RuntimeError("checker response does not match the requested channels")
+    return statuses
+
+
+def render_results(channels: list[Channel], statuses: list[dict[str, Any]]) -> bool:
+    results: list[Result] = []
+    seen: set[tuple[str, str, str]] = set()
+
+    def add(group: str, description: str, target: str, passed: bool | None, action: str = "-") -> None:
+        key = (group, description, target)
+        if key in seen:
+            return
+        seen.add(key)
+        status = "건너뜀" if passed is None else ("통과" if passed else "실패")
+        results.append(Result(group, description, target, status, action if not passed else "-"))
+
+    for channel, value in zip(channels, statuses):
+        account = value.get("account") or {}
+        add(channel.account, "서비스 account 확인", channel.account, bool(account.get("exists")), f"NATS Console에서 {channel.account} account를 생성하세요.")
+        if not account.get("exists"):
+            add(channel.account, "JetStream 활성화", channel.account, None, "서비스 account가 없어 확인하지 않습니다.")
+            continue
+        add(channel.account, "JetStream 활성화", channel.account, bool(account.get("jetstreamEnabled")), f"{channel.account} account에서 JetStream을 활성화하세요.")
+        if channel.publish_required:
+            add(channel.account, "메시지 Publish 권한", f"{channel.account} / {channel.subject}", account.get("publishAllowed") is True, f"{channel.account} account Publish permissions에 {channel.subject}를 추가하고 Deny 규칙을 확인하세요.")
+        add(channel.account, "Stream 존재", f"{channel.account} / {channel.stream}", bool(value.get("targetStream")), value.get("targetStreamError") or "Stream을 생성하세요.")
+        if not value.get("targetStream"):
+            continue
+        if channel.source_account:
+            source = value.get("sourceAccount") or {}
+            sharing = source.get("sourceSharing") or {}
+            add(channel.account, "원본 account 확인", channel.source_account, bool(source.get("exists")), f"NATS Console에서 {channel.source_account} account를 생성하세요.")
+            add(channel.account, "원본 JetStream 활성화", channel.source_account, bool(source.get("jetstreamEnabled")), f"{channel.source_account} account에서 JetStream을 활성화하세요.")
+            add(channel.account, "원본 Stream 존재", f"{channel.source_account} / {channel.source_stream}", value.get("sourceStream") is True, value.get("sourceStreamError") or "원본 Stream을 생성하세요.")
+            add(channel.account, "Stream Source 제공 허용", channel.source_account, bool(sharing.get("sourceSharingEnabled")), "NATS Console에서 Stream Source 공유를 활성화하세요.")
+            imports = all(sharing.get(name) is True for name in ("consumerAPIImportEnabled", "deliverySubjectImportEnabled", "flowControlImportEnabled"))
+            add(channel.account, "Stream Source account 연결 설정", f"{channel.source_account} -> {channel.account}", bool(sharing.get("sourceExportsEnabled")) and imports, "NATS Console에서 source account 연결을 갱신하세요.")
+            target = f"{channel.source_account} / {channel.source_stream} <- {channel.account} / {channel.stream}"
+            add(channel.account, "Stream Source 연결", target, value.get("sourceConnected") is True, "대상 Stream에 원본 Stream을 연결하세요.")
+            add(channel.account, "Stream Source filter", f"{target} [filter: {channel.source_filter}]", value.get("sourceFilter") is True, f"Stream Source filter를 {channel.source_filter}로 설정하세요.")
+        else:
+            add(channel.account, "이벤트를 저장할 Stream 준비", f"{channel.account} / {channel.stream} / {channel.subject}", value.get("subjectCovered") is True, f"Stream subject에 {channel.subject}를 추가하세요.")
+        if channel.consumer:
+            add(channel.account, "Consumer 준비", f"{channel.account} / {channel.stream} / {channel.consumer}", value.get("consumerReady") is True, value.get("consumerError") or "Consumer를 생성하세요.")
+
+    colors = {"통과": "\033[32m", "실패": "\033[31m", "건너뜀": "\033[33m"} if sys.stdout.isatty() else {}
+    reset, current = ("\033[0m" if colors else ""), ""
+    for result in results:
+        if result.group != current:
+            if current:
+                print()
+            print(f"[{result.group}]")
+            current = result.group
+        print(f"  [{colors.get(result.status, '')}{result.status}{reset}] {result.description}")
+        print(f"       대상: {result.target}")
+        if result.action != "-":
+            print(f"       조치: {result.action.replace(chr(9), ' ').replace(chr(10), ' ')}")
+    return any(result.status == "실패" for result in results)
 
 
 def usage() -> None:
@@ -596,7 +210,7 @@ def usage() -> None:
   NATS_URL=nats://<host>:<port> NATS_CREDS=/path/to/asyncapi-checker.creds ./asyncapi/check-channels.py
 
 Checks every declared account by default. Set NATS_ACCOUNT to filter checks.
-This program is read-only and never changes NATS configuration.""")
+All NATS inspection and matching is performed by nats-console.""")
 
 
 def main() -> int:
@@ -605,11 +219,8 @@ def main() -> int:
         return 0
     server = os.getenv("NATS_URL", "")
     creds = os.getenv("NATS_CREDS") or os.getenv("NATS_CREDENTIALS_PATH", "")
-    if not server:
-        print("ERROR: NATS_URL is required.", file=sys.stderr)
-        return 2
-    if not creds:
-        print("ERROR: NATS_CREDS is required.", file=sys.stderr)
+    if not server or not creds:
+        print("ERROR: NATS_URL and NATS_CREDS are required.", file=sys.stderr)
         return 2
     if not Path(creds).is_file() or not os.access(creds, os.R_OK):
         print(f"ERROR: NATS credentials file is not readable: {creds}", file=sys.stderr)
@@ -619,10 +230,15 @@ def main() -> int:
         return 2
     try:
         channels = discover_channels(os.getenv("NATS_ACCOUNT", ""))
+        statuses = request_checks(server, creds, os.getenv("NATS_TIMEOUT", "30s"), channels)
     except RuntimeError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
-    return Checker(server, creds, os.getenv("NATS_TIMEOUT", "5s"), channels).run()
+    if render_results(channels, statuses):
+        print("하나 이상의 AsyncAPI Stream 검사가 실패했습니다.", file=sys.stderr)
+        return 1
+    print("All AsyncAPI channels are ready.")
+    return 0
 
 
 if __name__ == "__main__":
