@@ -1,0 +1,6 @@
+{"blocks":[
+  {"type":"paragraph","text":"NATS Console은 기존 NATS Operator 환경의 계정, 사용자, JetStream 리소스를 웹에서 관리하는 콘솔입니다. 운영자는 계정과 사용자 권한을 설정하고, 스트림과 컨슈머 상태를 확인하며, 테스트 메시지를 발행할 수 있습니다."},
+  {"type":"table","caption":"주요 화면과 목적","headers":["화면","할 수 있는 일"],"rows":[["계정","Operator에 속한 계정과 사용자를 확인하고 권한 및 자격 증명을 관리합니다."],["스트림","계정을 선택해 JetStream 스트림, source, 컨슈머를 관리합니다."],["메시지","선택한 계정과 스트림의 메시지를 확인합니다."],["AsyncAPI","별도 검사 계정을 준비하고 서비스 계정의 Stream Info 접근을 선택합니다."]]},
+  {"type":"paragraph","text":"Operator는 NATS 인증의 최상위 신원이고 계정은 메시지와 JetStream 리소스의 경계입니다. 사용자는 계정에 속한 NATS 자격 증명입니다. 콘솔 로그인 계정은 NATS 사용자와 별개이며, 현재 로그인 API는 설정된 관리자 ID와 암호로 admin 토큰을 발급합니다."},
+  {"type":"links","items":[{"label":"로컬에서 시작하기","section":"getting-started"},{"label":"계정과 사용자","section":"accounts"},{"label":"배포 설정","section":"deployment"}]}
+]}

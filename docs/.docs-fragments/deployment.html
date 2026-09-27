@@ -1,0 +1,14 @@
+<section id="deployment" class="doc-section" data-kind="plaintext" aria-labelledby="deployment-title">
+  <h2 id="deployment-title">실행과 설정</h2>
+  <p class="doc-purpose">기존 NATS 환경에 콘솔을 연결하고 데이터를 보존하는 방법을 설명합니다.</p>
+  <p>외부 NATS에 배포할 때는 Operator 모드와 full resolver가 설정된 서버, 사전에 준비한 시스템 계정 및 Operator NKey seed가 필요합니다. 로컬 자동 부트스트랩은 개발 환경용이며 외부 배포에서는 운영 환경의 신원과 비밀 값을 주입합니다.</p>
+<table><caption>API 실행 환경 변수</caption><thead><tr><th scope="col">변수</th><th scope="col">용도 및 기본값</th></tr></thead><tbody><tr><td>NATS_URL</td><td>연결할 NATS 주소. 설정값 필요</td></tr><tr><td>NATS_SYS_NKEY</td><td>시스템 계정 seed. 설정값 필요</td></tr><tr><td>OPERATOR_NKEY</td><td>계정 JWT 서명과 콘솔 토큰에 쓰는 Operator seed. 설정값 필요</td></tr><tr><td>ADMIN_ID</td><td>관리자 로그인 ID. 설정값 필요</td></tr><tr><td>ADMIN_PASSWORD</td><td>관리자 로그인 암호. 설정값 필요</td></tr><tr><td>ALLOWED_ORIGINS</td><td>허용할 CORS 출처. 기본값 *</td></tr></tbody></table>
+<p>WEB_BASE_PATH의 기본값은 /입니다. /console 같은 하위 경로에 배포할 때는 이미지 빌드 인자와 컨테이너 실행 환경 변수에 같은 값을 설정하세요. 웹 빌드는 해당 경로로 정적 파일과 API 접두사를 만들고, 시작 스크립트는 Nginx 경로를 그 값으로 구성합니다.</p>
+<pre class="doc-code"><code>docker build --build-arg WEB_BASE_PATH=/console -f deploy/dockerfile.console -t nats-console:latest .</code></pre>
+<p>이미지는 9222 포트에서 웹과 API를 제공합니다. API는 내부 9322 포트에서 동작하며 Nginx가 /api 요청을 전달합니다. 루트 경로 배포의 상태 확인 주소는 http://localhost:9222/api/health이고, 하위 경로 배포에서는 접두사를 앞에 붙입니다.</p>
+<table><caption>유지해야 할 데이터</caption><thead><tr><th scope="col">위치</th><th scope="col">내용</th></tr></thead><tbody><tr><td>/app/data/console.db</td><td>콘솔 사용자와 로컬 계정 키 데이터. /app/data에 영구 볼륨 연결</td></tr><tr><td>NATS resolver 저장소</td><td>계정 JWT. 로컬 Compose에서는 nats-resolver 볼륨을 사용</td></tr></tbody></table>
+<p>로컬 Compose에서는 앱이 NATS 서비스 DNS로 연결하도록 NATS_APP_URL을 NATS_URL로 전달합니다. NATS는 4222 클라이언트 포트와 8222 모니터링 포트를 노출합니다. 외부 서버를 사용할 때는 그 서버에 도달 가능한 NATS_URL을 지정합니다.</p>
+<p>로그인이 실패하면 ADMIN_ID/ADMIN_PASSWORD 주입을 확인하고, 계정 목록이 비거나 요청이 실패하면 NATS 연결 및 full resolver 설정을 확인하세요. ./run.sh up이 NATS 대기에서 멈추면 http://localhost:8222/healthz와 NATS 로그를 먼저 확인합니다. 추가 운영 절차는 기존 docs/operations.md에 있습니다.</p>
+<ul><li><a href="index.html#getting-started">로컬 시작 절차</a></li><li><a href="index.html#architecture">데이터 경계와 API 구조</a></li></ul>
+  <nav class="doc-related" aria-label="관련 문서"><a href="index.html#getting-started">시작하기</a> · <a href="index.html#architecture">시스템 구조</a></nav>
+</section>

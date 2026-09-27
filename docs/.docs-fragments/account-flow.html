@@ -1,0 +1,41 @@
+<section id="account-flow" class="doc-section" data-kind="sequence" aria-labelledby="account-flow-title">
+  <h2 id="account-flow-title">계정 생성 흐름</h2>
+  <p class="doc-purpose">계정 생성 요청이 로컬 저장소와 NATS resolver에 반영되는 과정을 보여줍니다.</p>
+  <div class="sequence-viewer" data-sequence-id="account-flow">
+  <div class="sequence-toolbar" role="group" aria-label="Diagram controls" hidden>
+    <button type="button" data-action="out" aria-label="Zoom out" disabled>−</button>
+    <output class="sequence-zoom" aria-label="Zoom level">100%</output>
+    <button type="button" data-action="in" aria-label="Zoom in" disabled>+</button>
+    <button type="button" data-action="fit" disabled>Fit</button>
+    <button type="button" data-action="reset" disabled>Reset</button>
+  </div>
+  <p class="sequence-help" id="account-flow-help" hidden>Drag to pan. Scroll to zoom. Focus the diagram to use arrow keys, +, −, and Home.</p>
+  <div class="sequence-viewport" tabindex="0" role="region" aria-label="Sequence diagram" aria-describedby="account-flow-help">
+    <div class="sequence-canvas"><pre class="mermaid-source">sequenceDiagram
+    actor Admin as 관리자
+    participant Web as 웹 화면
+    participant API as 콘솔 API
+    participant DB as SQLite
+    participant NATS as NATS full resolver
+    Admin-&gt;&gt;Web: Operator와 계정 이름 입력
+    Web-&gt;&gt;API: 계정 생성 요청
+    API-&gt;&gt;API: 입력 및 중복 확인, 계정 키 생성
+    API-&gt;&gt;DB: 계정 서명 키 저장
+    API-&gt;&gt;DB: stream-reader 사용자와 권한 저장
+    API-&gt;&gt;NATS: 서명한 계정 JWT 갱신 요청
+    alt resolver 갱신 성공
+        NATS--&gt;&gt;API: 갱신 완료
+        API--&gt;&gt;Web: 201 계정 정보
+        Web--&gt;&gt;Admin: 생성된 계정 표시
+    else 사용자 준비 또는 resolver 갱신 실패
+        API-&gt;&gt;DB: 생성한 계정 데이터 정리
+        API--&gt;&gt;Web: 오류 응답
+        Web--&gt;&gt;Admin: 생성 실패 표시
+    end
+</pre></div>
+  </div>
+  <p class="sequence-status" role="status" hidden></p>
+</div>
+
+  <nav class="doc-related" aria-label="관련 문서"><a href="index.html#accounts">계정과 사용자 관리</a> · <a href="index.html#architecture">시스템 구조</a></nav>
+</section>

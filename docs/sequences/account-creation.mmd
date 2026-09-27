@@ -1,0 +1,21 @@
+sequenceDiagram
+    actor Admin as 관리자
+    participant Web as 웹 화면
+    participant API as 콘솔 API
+    participant DB as SQLite
+    participant NATS as NATS full resolver
+    Admin->>Web: Operator와 계정 이름 입력
+    Web->>API: 계정 생성 요청
+    API->>API: 입력 및 중복 확인, 계정 키 생성
+    API->>DB: 계정 서명 키 저장
+    API->>DB: stream-reader 사용자와 권한 저장
+    API->>NATS: 서명한 계정 JWT 갱신 요청
+    alt resolver 갱신 성공
+        NATS-->>API: 갱신 완료
+        API-->>Web: 201 계정 정보
+        Web-->>Admin: 생성된 계정 표시
+    else 사용자 준비 또는 resolver 갱신 실패
+        API->>DB: 생성한 계정 데이터 정리
+        API-->>Web: 오류 응답
+        Web-->>Admin: 생성 실패 표시
+    end

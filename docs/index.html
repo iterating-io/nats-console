@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NATS Console 안내</title>
+  <link rel="stylesheet" href="_assets/docs.css">
+  <script defer src="_assets/mermaid.min.js"></script>
+  <script src="_assets/docs.js" defer></script>
+</head>
+<body>
+  <a class="doc-skip-link" href="#main-content" data-doc-label="skip">Skip to content</a>
+  <aside class="doc-sidebar" aria-label="Document navigation">
+    <p class="doc-sidebar-title">NATS Console 안내</p>
+    <nav class="doc-nav" aria-label="Contents"><a href="index.html#overview">서비스 개요</a>
+<a href="index.html#getting-started">시작하기</a>
+<a href="index.html#accounts">계정과 사용자 관리</a>
+<a href="index.html#account-flow">계정 생성 흐름</a>
+<a href="index.html#jetstream">스트림과 메시지</a>
+<a href="index.html#asyncapi-checker">AsyncAPI 검사 계정</a>
+<a href="index.html#architecture">시스템 구조</a>
+<a href="index.html#deployment">실행과 설정</a></nav>
+  </aside>
+  <main class="doc-main" id="main-content" tabindex="-1">
+    <header class="doc-header">
+      <h1>NATS Console 안내</h1>
+    </header>
+    <section id="overview" class="doc-section" data-kind="plaintext" aria-labelledby="overview-title">
+  <h2 id="overview-title">서비스 개요</h2>
+  <p class="doc-purpose">NATS Console로 관리할 수 있는 대상과 기본 사용 흐름을 설명합니다.</p>
+  <p>NATS Console은 기존 NATS Operator 환경의 계정, 사용자, JetStream 리소스를 웹에서 관리하는 콘솔입니다. 운영자는 계정과 사용자 권한을 설정하고, 스트림과 컨슈머 상태를 확인하며, 테스트 메시지를 발행할 수 있습니다.</p>
+<table><caption>주요 화면과 목적</caption><thead><tr><th scope="col">화면</th><th scope="col">할 수 있는 일</th></tr></thead><tbody><tr><td>계정</td><td>Operator에 속한 계정과 사용자를 확인하고 권한 및 자격 증명을 관리합니다.</td></tr><tr><td>스트림</td><td>계정을 선택해 JetStream 스트림, source, 컨슈머를 관리합니다.</td></tr><tr><td>메시지</td><td>선택한 계정과 스트림의 메시지를 확인합니다.</td></tr><tr><td>AsyncAPI</td><td>별도 검사 계정을 준비하고 서비스 계정의 Stream Info 접근을 선택합니다.</td></tr></tbody></table>
+<p>Operator는 NATS 인증의 최상위 신원이고 계정은 메시지와 JetStream 리소스의 경계입니다. 사용자는 계정에 속한 NATS 자격 증명입니다. 콘솔 로그인 계정은 NATS 사용자와 별개이며, 현재 로그인 API는 설정된 관리자 ID와 암호로 admin 토큰을 발급합니다.</p>
+<ul><li><a href="index.html#getting-started">로컬에서 시작하기</a></li><li><a href="index.html#accounts">계정과 사용자</a></li><li><a href="index.html#deployment">배포 설정</a></li></ul>
+  <nav class="doc-related" aria-label="관련 문서"><a href="index.html#getting-started">시작하기</a> · <a href="index.html#accounts">계정과 사용자 관리</a> · <a href="index.html#jetstream">스트림과 메시지</a> · <a href="index.html#asyncapi-checker">AsyncAPI 검사 계정</a> · <a href="index.html#architecture">시스템 구조</a> · <a href="index.html#deployment">실행과 설정</a></nav>
+</section>
+
+<section id="getting-started" class="doc-section" data-kind="plaintext" aria-labelledby="getting-started-title">
+  <h2 id="getting-started-title">시작하기</h2>
+  <p class="doc-purpose">로컬 개발 환경을 준비하고 첫 로그인까지 진행하는 절차를 설명합니다.</p>
+  <p>로컬 개발 환경은 run.sh가 NATS와 콘솔을 Docker Compose로 시작합니다. Docker, Docker Compose, Go가 필요하며, 생성된 환경 변수를 셸에 적용하려면 direnv를 사용합니다.</p>
+<ol><li>프로젝트 루트에서 ./run.sh up을 실행합니다. 첫 실행에서 인증 파일을 생성하면 스크립트가 종료됩니다.</li><li>direnv allow로 새 .envrc를 적용한 다음 ./run.sh up을 다시 실행합니다.</li><li>NATS 상태 확인을 통과하고 앱이 시작되면 http://localhost:9222에 접속합니다.</li><li>ADMIN_ID와 ADMIN_PASSWORD로 로그인한 뒤 계정 화면에서 Operator와 계정을 확인합니다.</li></ol>
+<p>첫 실행은 deploy/auth.conf, deploy/keys/와 루트 .envrc를 만듭니다. 생성된 신원 파일이 빠졌거나 서로 맞지 않으면 run.sh가 이를 다시 만들면서 로컬의 resolver 및 사용자 데이터 볼륨도 제거합니다. 기존 데이터를 보존해야 하는 환경에서는 생성 파일을 지우기 전에 백업하세요.</p>
+<table><caption>로컬 명령</caption><thead><tr><th scope="col">명령</th><th scope="col">결과</th></tr></thead><tbody><tr><td>./run.sh up</td><td>필요한 이미지를 빌드하고 NATS와 앱을 시작합니다.</td></tr><tr><td>./run.sh ps</td><td>컨테이너 상태를 봅니다.</td></tr><tr><td>./run.sh logs</td><td>서비스 로그를 따릅니다.</td></tr><tr><td>./run.sh down</td><td>컨테이너를 중지하고 제거하며 볼륨은 유지합니다.</td></tr><tr><td>./run.sh clean</td><td>확인을 받은 뒤 컨테이너, 볼륨, 생성 자격 증명을 제거합니다.</td></tr></tbody></table>
+<p>앱 상태는 http://localhost:9222/api/health에서 확인합니다. 로컬 NATS 클라이언트는 4222 포트, 모니터링은 8222 포트를 사용합니다. API의 9322 포트는 컨테이너 내부에서 Nginx가 연결합니다.</p>
+<ul><li><a href="index.html#deployment">실행 환경 변수와 영구 저장소</a></li><li><a href="index.html#accounts">첫 계정 만들기</a></li></ul>
+  <nav class="doc-related" aria-label="관련 문서"><a href="index.html#deployment">실행과 설정</a> · <a href="index.html#accounts">계정과 사용자 관리</a></nav>
+</section>
+
+<section id="accounts" class="doc-section" data-kind="plaintext" aria-labelledby="accounts-title">
+  <h2 id="accounts-title">계정과 사용자 관리</h2>
+  <p class="doc-purpose">계정 생성, 권한, 자격 증명, 삭제 조건을 설명합니다.</p>
+  <p>계정 화면에서 기존 Operator 아래 계정을 만들고, 계정별 NATS 사용자를 관리합니다. Operator 신원은 서버에서 불러오며 콘솔에서 새 Operator를 만들지 않습니다. 계정을 만들 때 이름과 Operator를 지정하고 필요하면 publish/subscribe 허용 subject를 설정합니다.</p>
+<p>생성 요청은 계정 키를 만들고 서명 키를 SQLite에 보관한 뒤, 기본 사용자 stream-reader를 생성합니다. 마지막으로 계정 JWT를 NATS full resolver에 보냅니다. 같은 Operator 안에서 중복된 계정 이름은 거부됩니다. 사용자 준비나 resolver 갱신이 실패하면 생성한 로컬 계정 데이터를 정리하고 오류를 반환합니다.</p>
+<table><caption>stream-reader 기본 권한</caption><thead><tr><th scope="col">구분</th><th scope="col">subject</th></tr></thead><tbody><tr><td>publish 허용</td><td>$JS.API.STREAM.INFO.*, $JS.API.STREAM.MSG.GET.*</td></tr><tr><td>publish 거부</td><td>$JS.API.CONSUMER.&gt;, $JS.API.STREAM.CREATE.&gt;, $JS.API.STREAM.UPDATE.&gt;, $JS.API.STREAM.DELETE.&gt;, $JS.API.STREAM.PURGE.&gt;, $JS.API.STREAM.MSG.DELETE.&gt;</td></tr><tr><td>subscribe 허용</td><td>_INBOX.&gt;</td></tr></tbody></table>
+<p>일반 사용자는 계정에 속한 NATS 신원입니다. 콘솔에서 사용자를 생성하면 키와 권한 정보가 SQLite에 저장됩니다. creds 내보내기는 사용자 자격 증명을 외부 클라이언트에 전달할 때 사용합니다. 내보낸 파일은 접속 권한을 담으므로 접근 가능한 위치를 관리해야 합니다.</p>
+<p>계정 삭제는 NATS resolver의 allow_delete가 켜져 있을 때만 가능합니다. 시스템 계정은 삭제할 수 없습니다. 삭제 요청은 관련 스트림과 source 연결을 먼저 정리하고, 검사 계정의 import를 해제한 뒤 resolver에서 계정을 삭제합니다. 정리 또는 resolver 삭제에 실패하면 API가 오류를 반환합니다.</p>
+<ul><li><a href="index.html#account-flow">계정 생성 처리 흐름</a></li><li><a href="index.html#jetstream">계정별 스트림 작업</a></li></ul>
+  <nav class="doc-related" aria-label="관련 문서"><a href="index.html#account-flow">계정 생성 흐름</a> · <a href="index.html#jetstream">스트림과 메시지</a></nav>
+</section>
+
+<section id="account-flow" class="doc-section" data-kind="sequence" aria-labelledby="account-flow-title">
+  <h2 id="account-flow-title">계정 생성 흐름</h2>
+  <p class="doc-purpose">계정 생성 요청이 로컬 저장소와 NATS resolver에 반영되는 과정을 보여줍니다.</p>
+  <div class="sequence-viewer" data-sequence-id="account-flow">
+  <div class="sequence-toolbar" role="group" aria-label="Diagram controls" hidden>
+    <button type="button" data-action="out" aria-label="Zoom out" disabled>−</button>
+    <output class="sequence-zoom" aria-label="Zoom level">100%</output>
+    <button type="button" data-action="in" aria-label="Zoom in" disabled>+</button>
+    <button type="button" data-action="fit" disabled>Fit</button>
+    <button type="button" data-action="reset" disabled>Reset</button>
+  </div>
+  <p class="sequence-help" id="account-flow-help" hidden>Drag to pan. Scroll to zoom. Focus the diagram to use arrow keys, +, −, and Home.</p>
+  <div class="sequence-viewport" tabindex="0" role="region" aria-label="Sequence diagram" aria-describedby="account-flow-help">
+    <div class="sequence-canvas"><pre class="mermaid-source">sequenceDiagram
+    actor Admin as 관리자
+    participant Web as 웹 화면
+    participant API as 콘솔 API
+    participant DB as SQLite
+    participant NATS as NATS full resolver
+    Admin-&gt;&gt;Web: Operator와 계정 이름 입력
+    Web-&gt;&gt;API: 계정 생성 요청
+    API-&gt;&gt;API: 입력 및 중복 확인, 계정 키 생성
+    API-&gt;&gt;DB: 계정 서명 키 저장
+    API-&gt;&gt;DB: stream-reader 사용자와 권한 저장
+    API-&gt;&gt;NATS: 서명한 계정 JWT 갱신 요청
+    alt resolver 갱신 성공
+        NATS--&gt;&gt;API: 갱신 완료
+        API--&gt;&gt;Web: 201 계정 정보
+        Web--&gt;&gt;Admin: 생성된 계정 표시
+    else 사용자 준비 또는 resolver 갱신 실패
+        API-&gt;&gt;DB: 생성한 계정 데이터 정리
+        API--&gt;&gt;Web: 오류 응답
+        Web--&gt;&gt;Admin: 생성 실패 표시
+    end
+</pre></div>
+  </div>
+  <p class="sequence-status" role="status" hidden></p>
+</div>
+
+  <nav class="doc-related" aria-label="관련 문서"><a href="index.html#accounts">계정과 사용자 관리</a> · <a href="index.html#architecture">시스템 구조</a></nav>
+</section>
+
+<section id="jetstream" class="doc-section" data-kind="plaintext" aria-labelledby="jetstream-title">
+  <h2 id="jetstream-title">스트림과 메시지</h2>
+  <p class="doc-purpose">계정별 JetStream 작업과 메시지 확인 방법을 설명합니다.</p>
+  <p>스트림과 컨슈머 작업은 먼저 대상 계정을 선택한 뒤 수행합니다. API는 accountPublicKey로 계정을 찾고 JetStream 사용 여부를 확인합니다. 따라서 같은 스트림 이름이라도 다른 계정의 리소스와 혼동하지 않도록 현재 선택한 계정을 확인하세요.</p>
+<ol><li>계정 화면에서 해당 계정의 JetStream을 활성화합니다.</li><li>스트림 화면에서 계정을 선택하고 스트림 이름과 subject를 입력해 생성합니다.</li><li>생성된 스트림의 설정·상태·메시지를 확인하고 필요하면 컨슈머를 추가합니다.</li><li>메시지 화면에서는 계정과 스트림을 명시적으로 선택한 뒤 마지막 메시지를 확인합니다.</li></ol>
+<p>스트림 생성 시 subject를 생략하면 서버는 스트림 이름 뒤에 .&gt;를 붙인 기본 패턴을 사용합니다. 스트림 상세 응답에는 이름과 subject 외에 설정, 상태, 클러스터 정보, 생성 시각이 포함됩니다. 스트림과 컨슈머의 변경 및 삭제 작업은 선택한 계정에 적용됩니다.</p>
+<p>다른 계정의 스트림을 source로 가져오려면 원본 계정이 source 공유를 허용하고 대상 계정에 필요한 접근 권한이 있어야 합니다. 콘솔은 source 추가 과정에서 계정 사이의 권한을 설정합니다. AsyncAPI 문서의 x-source 선언을 검사할 때는 원본과 대상의 연결 상태도 확인합니다.</p>
+<p>메시지 읽기는 계정의 stream-reader 사용자 연결을 사용합니다. 이 사용자는 Stream Info 및 Message Get 요청과 응답 inbox를 허용하며 스트림 수정과 삭제 권한은 갖지 않습니다.</p>
+<ul><li><a href="index.html#accounts">계정과 권한</a></li><li><a href="index.html#asyncapi-checker">AsyncAPI 검사 계정</a></li></ul>
+  <nav class="doc-related" aria-label="관련 문서"><a href="index.html#accounts">계정과 사용자 관리</a> · <a href="index.html#asyncapi-checker">AsyncAPI 검사 계정</a></nav>
+</section>
+
+<section id="asyncapi-checker" class="doc-section" data-kind="plaintext" aria-labelledby="asyncapi-checker-title">
+  <h2 id="asyncapi-checker-title">AsyncAPI 검사 계정</h2>
+  <p class="doc-purpose">검사 계정과 선택적 Stream Info import의 역할을 설명합니다.</p>
+  <p>AsyncAPI 화면은 별도의 asyncapi-checker 계정을 준비하고 각 서비스 계정의 JetStream Stream Info 조회 권한을 선택적으로 연결합니다. 검사 계정은 서비스 계정의 이벤트를 구독하거나 스트림과 컨슈머를 변경하는 용도가 아닙니다.</p>
+<ol><li>AsyncAPI 화면에서 검사 계정 준비를 실행합니다. 이미 계정이 있으면 사용자와 상태 조회 접근을 확인합니다.</li><li>검사할 JetStream 사용 서비스 계정마다 Stream Info import를 활성화합니다.</li><li>서비스별 AsyncAPI 선언을 수정한 뒤 asyncapi/check-channels.py로 실제 채널과 source 연결을 검사합니다.</li></ol>
+<p>import는 서비스 계정의 $JS.API.STREAM.INFO.&gt; 요청을 검사 계정의 별칭으로 노출하며 activation token으로 보호됩니다. 검사 사용자는 허용된 별칭과 상태 조회 subject에 요청을 발행하고 _INBOX.&gt;로 응답을 받습니다. 검사 대상 계정의 import를 끄면 해당 조회 경로를 제거합니다.</p>
+<p>검사 도구는 문서의 x-jetstream.stream과 실제 스트림 subject를 비교하며 스트림을 만들거나 변경하지 않습니다. NATS_ACCOUNT를 지정하면 한 계정에 범위를 좁히고, 그 계정을 source로 참조하는 downstream 연결도 확인합니다. 자세한 판정 기준과 계정 경계는 기존 asyncapi/CHECKER.md에 있습니다.</p>
+<ul><li><a href="index.html#jetstream">스트림과 source 관리</a></li><li><a href="index.html#architecture">시스템 구조</a></li></ul>
+  <nav class="doc-related" aria-label="관련 문서"><a href="index.html#jetstream">스트림과 메시지</a> · <a href="index.html#accounts">계정과 사용자 관리</a></nav>
+</section>
+
+<section id="architecture" class="doc-section" data-kind="plaintext" aria-labelledby="architecture-title">
+  <h2 id="architecture-title">시스템 구조</h2>
+  <p class="doc-purpose">웹, API, NATS, SQLite의 책임과 데이터 보존 경계를 설명합니다.</p>
+  <p>브라우저는 React 화면을 사용하고 Nginx를 거쳐 Go API에 요청합니다. API는 NATS 및 JetStream과 통신하고 콘솔 자체 사용자 기록을 SQLite에 보관합니다. 배포 이미지에는 웹 정적 파일, API 바이너리, Nginx가 함께 들어 있습니다.</p>
+<table><caption>구성 요소와 책임</caption><thead><tr><th scope="col">구성 요소</th><th scope="col">역할</th></tr></thead><tbody><tr><td>웹 (web/)</td><td>계정, 스트림, 메시지, AsyncAPI 화면과 로그인 상태를 제공합니다.</td></tr><tr><td>API (api/)</td><td>인증, 계정 JWT 갱신, NATS/JetStream 작업, 상태 조회를 처리합니다.</td></tr><tr><td>NATS full resolver</td><td>계정 JWT를 보관하고 계정 인증 상태를 제공합니다.</td></tr><tr><td>SQLite (console.db)</td><td>콘솔에서 만든 사용자와 계정 서명 키 등 로컬 데이터를 보관합니다.</td></tr><tr><td>Nginx</td><td>웹 파일을 제공하고 API 및 WebSocket 요청을 내부 API로 전달합니다.</td></tr></tbody></table>
+<p>API는 시작할 때 시스템 계정 seed로 임시 사용자 JWT와 키를 만들고 NATS에 연결합니다. 연결 후 resolver의 계정을 메모리로 불러옵니다. 계정 생성이나 권한 변경 시 새 계정 JWT를 Operator 키로 서명해 resolver에 갱신합니다.</p>
+<p>브라우저 로그인은 관리자 자격 증명을 검사하고 12시간 유효한 콘솔 JWT를 발급합니다. 일반 REST 요청은 Bearer 토큰을 사용하고 WebSocket 연결은 token 쿼리 값을 사용합니다. WebSocket은 세션 정보를 먼저 보내고 이후 3초마다 NATS 연결 상태를 heartbeat로 보냅니다.</p>
+<p>JetStream API는 요청한 계정별 NATS 연결을 재사용합니다. 저장된 사용자의 권한이 필요한 메시지 읽기에는 그 사용자 신원으로 연결합니다. 계정 데이터는 resolver와 로컬 SQLite 두 곳에 나뉘므로 배포 시 두 저장소의 보존을 함께 고려해야 합니다.</p>
+<ul><li><a href="index.html#account-flow">계정 생성 흐름</a></li><li><a href="index.html#deployment">실행과 데이터 보존</a></li></ul>
+  <nav class="doc-related" aria-label="관련 문서"><a href="index.html#deployment">실행과 설정</a> · <a href="index.html#account-flow">계정 생성 흐름</a></nav>
+</section>
+
+<section id="deployment" class="doc-section" data-kind="plaintext" aria-labelledby="deployment-title">
+  <h2 id="deployment-title">실행과 설정</h2>
+  <p class="doc-purpose">기존 NATS 환경에 콘솔을 연결하고 데이터를 보존하는 방법을 설명합니다.</p>
+  <p>외부 NATS에 배포할 때는 Operator 모드와 full resolver가 설정된 서버, 사전에 준비한 시스템 계정 및 Operator NKey seed가 필요합니다. 로컬 자동 부트스트랩은 개발 환경용이며 외부 배포에서는 운영 환경의 신원과 비밀 값을 주입합니다.</p>
+<table><caption>API 실행 환경 변수</caption><thead><tr><th scope="col">변수</th><th scope="col">용도 및 기본값</th></tr></thead><tbody><tr><td>NATS_URL</td><td>연결할 NATS 주소. 설정값 필요</td></tr><tr><td>NATS_SYS_NKEY</td><td>시스템 계정 seed. 설정값 필요</td></tr><tr><td>OPERATOR_NKEY</td><td>계정 JWT 서명과 콘솔 토큰에 쓰는 Operator seed. 설정값 필요</td></tr><tr><td>ADMIN_ID</td><td>관리자 로그인 ID. 설정값 필요</td></tr><tr><td>ADMIN_PASSWORD</td><td>관리자 로그인 암호. 설정값 필요</td></tr><tr><td>ALLOWED_ORIGINS</td><td>허용할 CORS 출처. 기본값 *</td></tr></tbody></table>
+<p>WEB_BASE_PATH의 기본값은 /입니다. /console 같은 하위 경로에 배포할 때는 이미지 빌드 인자와 컨테이너 실행 환경 변수에 같은 값을 설정하세요. 웹 빌드는 해당 경로로 정적 파일과 API 접두사를 만들고, 시작 스크립트는 Nginx 경로를 그 값으로 구성합니다.</p>
+<pre class="doc-code"><code>docker build --build-arg WEB_BASE_PATH=/console -f deploy/dockerfile.console -t nats-console:latest .</code></pre>
+<p>이미지는 9222 포트에서 웹과 API를 제공합니다. API는 내부 9322 포트에서 동작하며 Nginx가 /api 요청을 전달합니다. 루트 경로 배포의 상태 확인 주소는 http://localhost:9222/api/health이고, 하위 경로 배포에서는 접두사를 앞에 붙입니다.</p>
+<table><caption>유지해야 할 데이터</caption><thead><tr><th scope="col">위치</th><th scope="col">내용</th></tr></thead><tbody><tr><td>/app/data/console.db</td><td>콘솔 사용자와 로컬 계정 키 데이터. /app/data에 영구 볼륨 연결</td></tr><tr><td>NATS resolver 저장소</td><td>계정 JWT. 로컬 Compose에서는 nats-resolver 볼륨을 사용</td></tr></tbody></table>
+<p>로컬 Compose에서는 앱이 NATS 서비스 DNS로 연결하도록 NATS_APP_URL을 NATS_URL로 전달합니다. NATS는 4222 클라이언트 포트와 8222 모니터링 포트를 노출합니다. 외부 서버를 사용할 때는 그 서버에 도달 가능한 NATS_URL을 지정합니다.</p>
+<p>로그인이 실패하면 ADMIN_ID/ADMIN_PASSWORD 주입을 확인하고, 계정 목록이 비거나 요청이 실패하면 NATS 연결 및 full resolver 설정을 확인하세요. ./run.sh up이 NATS 대기에서 멈추면 http://localhost:8222/healthz와 NATS 로그를 먼저 확인합니다. 추가 운영 절차는 기존 docs/operations.md에 있습니다.</p>
+<ul><li><a href="index.html#getting-started">로컬 시작 절차</a></li><li><a href="index.html#architecture">데이터 경계와 API 구조</a></li></ul>
+  <nav class="doc-related" aria-label="관련 문서"><a href="index.html#getting-started">시작하기</a> · <a href="index.html#architecture">시스템 구조</a></nav>
+</section>
+
+  </main>
+</body>
+</html>

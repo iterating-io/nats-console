@@ -1,0 +1,76 @@
+version: 1
+title: NATS Console 안내
+lang: ko
+sections:
+  - id: overview
+    kind: plaintext
+    title: 서비스 개요
+    purpose: NATS Console로 관리할 수 있는 대상과 기본 사용 흐름을 설명합니다.
+    terms: [계정, 사용자, JetStream, AsyncAPI]
+    source: content/overview.json
+    page: index.html
+    related: [getting-started, accounts, jetstream, asyncapi-checker, architecture, deployment]
+    code: [../web/src/App.tsx, ../api/internal/httpapi/routes.go]
+  - id: getting-started
+    kind: plaintext
+    title: 시작하기
+    purpose: 로컬 개발 환경을 준비하고 첫 로그인까지 진행하는 절차를 설명합니다.
+    terms: [시작, 로컬, 부트스트랩, 로그인]
+    source: content/getting-started.json
+    page: index.html
+    related: [deployment, accounts]
+    code: [../run.sh, ../deploy/docker-compose.yml, ../api/internal/auth/handler.go]
+  - id: accounts
+    kind: plaintext
+    title: 계정과 사용자 관리
+    purpose: 계정 생성, 권한, 자격 증명, 삭제 조건을 설명합니다.
+    terms: [계정, 사용자, 권한, credential]
+    source: content/accounts.json
+    page: index.html
+    related: [account-flow, jetstream]
+    code: [../api/internal/accounts/handler.go, ../api/internal/accounts/handler_internal.go, ../api/internal/users/handler.go]
+  - id: account-flow
+    kind: sequence
+    title: 계정 생성 흐름
+    purpose: 계정 생성 요청이 로컬 저장소와 NATS resolver에 반영되는 과정을 보여줍니다.
+    terms: [계정 생성, resolver, stream-reader]
+    source: sequences/account-creation.mmd
+    page: index.html
+    related: [accounts, architecture]
+    code: [../api/internal/accounts/handler.go]
+  - id: jetstream
+    kind: plaintext
+    title: 스트림과 메시지
+    purpose: 계정별 JetStream 작업과 메시지 확인 방법을 설명합니다.
+    terms: [JetStream, 스트림, 컨슈머, 메시지, source]
+    source: content/jetstream.json
+    page: index.html
+    related: [accounts, asyncapi-checker]
+    code: [../api/internal/jetstream/handler.go, ../web/src/pages/StreamsPage.tsx, ../web/src/pages/MessagesPage.tsx]
+  - id: asyncapi-checker
+    kind: plaintext
+    title: AsyncAPI 검사 계정
+    purpose: 검사 계정과 선택적 Stream Info import의 역할을 설명합니다.
+    terms: [AsyncAPI, 검사 계정, Stream Info, import]
+    source: content/asyncapi-checker.json
+    page: index.html
+    related: [jetstream, accounts]
+    code: [../api/internal/accounts/asyncapi_handler.go, ../api/internal/accounts/asyncapi.go, ../asyncapi/CHECKER.md]
+  - id: architecture
+    kind: plaintext
+    title: 시스템 구조
+    purpose: 웹, API, NATS, SQLite의 책임과 데이터 보존 경계를 설명합니다.
+    terms: [구조, 저장소, API, NATS]
+    source: content/architecture.json
+    page: index.html
+    related: [deployment, account-flow]
+    code: [../api/cmd/server/main.go, ../api/internal/httpapi/routes.go, ../api/internal/store/store.go]
+  - id: deployment
+    kind: plaintext
+    title: 실행과 설정
+    purpose: 기존 NATS 환경에 콘솔을 연결하고 데이터를 보존하는 방법을 설명합니다.
+    terms: [배포, 환경 변수, 포트, 볼륨]
+    source: content/deployment.json
+    page: index.html
+    related: [getting-started, architecture]
+    code: [../api/internal/config/config.go, ../deploy/dockerfile.console, ../deploy/entrypoint.sh, ../deploy/docker-compose.yml]

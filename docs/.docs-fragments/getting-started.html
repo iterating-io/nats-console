@@ -1,0 +1,11 @@
+<section id="getting-started" class="doc-section" data-kind="plaintext" aria-labelledby="getting-started-title">
+  <h2 id="getting-started-title">시작하기</h2>
+  <p class="doc-purpose">로컬 개발 환경을 준비하고 첫 로그인까지 진행하는 절차를 설명합니다.</p>
+  <p>로컬 개발 환경은 run.sh가 NATS와 콘솔을 Docker Compose로 시작합니다. Docker, Docker Compose, Go가 필요하며, 생성된 환경 변수를 셸에 적용하려면 direnv를 사용합니다.</p>
+<ol><li>프로젝트 루트에서 ./run.sh up을 실행합니다. 첫 실행에서 인증 파일을 생성하면 스크립트가 종료됩니다.</li><li>direnv allow로 새 .envrc를 적용한 다음 ./run.sh up을 다시 실행합니다.</li><li>NATS 상태 확인을 통과하고 앱이 시작되면 http://localhost:9222에 접속합니다.</li><li>ADMIN_ID와 ADMIN_PASSWORD로 로그인한 뒤 계정 화면에서 Operator와 계정을 확인합니다.</li></ol>
+<p>첫 실행은 deploy/auth.conf, deploy/keys/와 루트 .envrc를 만듭니다. 생성된 신원 파일이 빠졌거나 서로 맞지 않으면 run.sh가 이를 다시 만들면서 로컬의 resolver 및 사용자 데이터 볼륨도 제거합니다. 기존 데이터를 보존해야 하는 환경에서는 생성 파일을 지우기 전에 백업하세요.</p>
+<table><caption>로컬 명령</caption><thead><tr><th scope="col">명령</th><th scope="col">결과</th></tr></thead><tbody><tr><td>./run.sh up</td><td>필요한 이미지를 빌드하고 NATS와 앱을 시작합니다.</td></tr><tr><td>./run.sh ps</td><td>컨테이너 상태를 봅니다.</td></tr><tr><td>./run.sh logs</td><td>서비스 로그를 따릅니다.</td></tr><tr><td>./run.sh down</td><td>컨테이너를 중지하고 제거하며 볼륨은 유지합니다.</td></tr><tr><td>./run.sh clean</td><td>확인을 받은 뒤 컨테이너, 볼륨, 생성 자격 증명을 제거합니다.</td></tr></tbody></table>
+<p>앱 상태는 http://localhost:9222/api/health에서 확인합니다. 로컬 NATS 클라이언트는 4222 포트, 모니터링은 8222 포트를 사용합니다. API의 9322 포트는 컨테이너 내부에서 Nginx가 연결합니다.</p>
+<ul><li><a href="index.html#deployment">실행 환경 변수와 영구 저장소</a></li><li><a href="index.html#accounts">첫 계정 만들기</a></li></ul>
+  <nav class="doc-related" aria-label="관련 문서"><a href="index.html#deployment">실행과 설정</a> · <a href="index.html#accounts">계정과 사용자 관리</a></nav>
+</section>

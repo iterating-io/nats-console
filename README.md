@@ -173,6 +173,7 @@ docker-compose up
 
 ## Documentation
 
+- [docs/index.html](docs/index.html) — Usage, account management, JetStream, AsyncAPI, architecture, and deployment guide
 - [docs/operations.md](docs/operations.md) — Deployment and configuration details
 - [docs/architecture.md](docs/architecture.md) — System design and API reference
 
