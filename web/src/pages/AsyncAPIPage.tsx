@@ -6,6 +6,9 @@ import type { Account } from "../types";
 
 type ImportItem = { account: Account; imported: boolean; alias: string };
 type AsyncAPIState = { checkerExists: boolean; checker?: Account; imports: ImportItem[] };
+type CheckResult = { name: string; target: string; passed: boolean; detail?: string };
+type ChannelResult = { account: string; stream: string; subject: string; checks: CheckResult[] };
+type FileResult = { name: string; error?: string; channels: ChannelResult[] };
 
 export default function AsyncAPIPage() {
     const apiBase = useApiBase();
@@ -15,6 +18,8 @@ export default function AsyncAPIPage() {
     const [error, setError] = useState("");
     const [loading, setLoading] = useState("");
     const [creds, setCreds] = useState("");
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+    const [fileResults, setFileResults] = useState<FileResult[]>([]);
 
     const headers = { Authorization: `Bearer ${token}` };
     const handleUnauthorized = () => { logout(); navigate("/"); };
@@ -60,6 +65,19 @@ export default function AsyncAPIPage() {
         const url = URL.createObjectURL(new Blob([creds], { type: "text/plain;charset=utf-8" }));
         const link = document.createElement("a"); link.href = url; link.download = "asyncapi-checker.creds"; link.click(); URL.revokeObjectURL(url);
     };
+    const checkFiles = async () => {
+        setLoading("check"); setError(""); setFileResults([]);
+        try {
+            const files = await Promise.all(selectedFiles.map(async (file) => ({ name: file.webkitRelativePath || file.name, content: await file.text() })));
+            const res = await fetch(`${apiBase}/api/v1/asyncapi/check`, {
+                method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify({ files }),
+            });
+            if (res.status === 401) return handleUnauthorized();
+            if (!res.ok) { setError((await res.text()).trim() || "Failed to check AsyncAPI files."); return; }
+            setFileResults(((await res.json()) as { files: FileResult[] }).files);
+        } catch { setError("Failed to read or check AsyncAPI files."); }
+        finally { setLoading(""); }
+    };
 
     return <div className="page">
         <div className="page-header"><div><h2>AsyncAPI</h2><p className="muted">Centralized, read-only JetStream Stream and Consumer Info access across service accounts.</p></div></div>
@@ -70,6 +88,21 @@ export default function AsyncAPIPage() {
             <section className="panel"><h3>Checker account</h3><p><code>{state.checker?.name}</code></p><p className="muted">The checker can query an account status through <code>checker.status.account</code>, publish only to enabled Stream and Consumer Info aliases, and receive replies on <code>_INBOX.&gt;</code>.</p><p className="muted"><strong>Update checker access</strong> repairs common access and reapplies every enabled service-account import, including Stream and Consumer Info. Run it after checker access changes, then download fresh checker credentials.</p><button type="button" disabled={loading === "create"} onClick={createChecker}>{loading === "create" ? "Updating…" : "Update checker access"}</button><button type="button" disabled={loading === "creds"} onClick={showCreds} style={{ marginLeft: "0.5rem" }}>{loading === "creds" ? "Loading…" : "Show checker credentials"}</button></section>
             {creds && <section className="panel"><h3>Checker credentials</h3><textarea readOnly value={creds} rows={12} style={{ width: "100%" }} /><div style={{ marginTop: "0.6rem", display: "flex", gap: "0.5rem" }}><button type="button" onClick={() => navigator.clipboard.writeText(creds)}>Copy</button><button type="button" onClick={downloadCreds}>Download .creds</button></div><p className="muted">Export fresh credentials after changing imports, then reconnect the checker script.</p></section>}
             <section className="panel"><h3>Service account APIs</h3><p className="muted">Enable an import to expose only that account’s Stream and Consumer Info APIs through checker aliases.</p><ul className="list">{state.imports.length === 0 && <li className="muted">No service accounts are available.</li>}{state.imports.map((item) => <li key={item.account.publicKey} className="list-row"><div><strong>{item.account.name}</strong>{item.imported ? <span className="badge ok" style={{ marginLeft: "0.5rem" }}>Imported</span> : <span className="badge" style={{ marginLeft: "0.5rem" }}>Not imported</span>}<div className="muted"><code>{item.alias}</code></div>{!item.account.jsEnabled && <div className="muted">JetStream is disabled</div>}</div><button type="button" disabled={loading === item.account.publicKey || (!item.imported && !item.account.jsEnabled)} onClick={() => toggleImport(item)}>{loading === item.account.publicKey ? "Updating…" : item.imported ? "Remove Import" : "Import API"}</button></li>)}</ul></section>
+            <section className="panel">
+                <h3>Check AsyncAPI files</h3>
+                <p className="muted">Select an AsyncAPI folder to include its messages and schemas, or select individual YAML files. The console checks root AsyncAPI documents against NATS and verifies their relative references. Maximum: 20 YAML files, 2 MiB total.</p>
+                <label>Folder <input type="file" {...{ webkitdirectory: "" }} multiple onChange={(event) => { setSelectedFiles(Array.from(event.target.files ?? []).filter((file) => /\.ya?ml$/i.test(file.name))); setFileResults([]); }} /></label>
+                <label>Files <input type="file" accept=".yaml,.yml" multiple onChange={(event) => { setSelectedFiles(Array.from(event.target.files ?? [])); setFileResults([]); }} /></label>
+                <button type="button" disabled={loading === "check" || selectedFiles.length === 0} onClick={checkFiles}>{loading === "check" ? "Checking…" : `Check ${selectedFiles.length} file${selectedFiles.length === 1 ? "" : "s"}`}</button>
+                {fileResults.map((file) => <div key={file.name}>
+                    <h4>{file.name}</h4>
+                    {file.error && <p className="error">{file.error}</p>}
+                    {file.channels.map((channel, index) => <div key={`${channel.account}-${channel.stream}-${channel.subject}-${index}`}>
+                        <p><strong>{channel.account} / {channel.stream} / {channel.subject}</strong></p>
+                        <ul className="list">{channel.checks.map((check, checkIndex) => <li key={checkIndex} className="list-row"><span><strong style={{ color: check.passed ? "#1fb588" : "#ff6b6b", marginRight: "0.45rem" }} aria-label={check.passed ? "Passed" : "Failed"}>{check.passed ? "✓" : "✗"}</strong>{check.name}: <code>{check.target}</code>{!check.passed && check.detail && <span className="muted"> — {check.detail}</span>}</span></li>)}</ul>
+                    </div>)}
+                </div>)}
+            </section>
         </>}
     </div>;
 }

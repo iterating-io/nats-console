@@ -55,7 +55,7 @@ sections:
     source: content/asyncapi-checker.json
     page: index.html
     related: [jetstream, accounts]
-    code: [../api/internal/accounts/asyncapi_handler.go, ../api/internal/accounts/asyncapi.go, ../asyncapi/CHECKER.md]
+    code: [../api/internal/accounts/asyncapi_handler.go, ../api/internal/accounts/asyncapi.go, ../api/internal/httpapi/asyncapi_upload.go, ../web/src/pages/AsyncAPIPage.tsx]
   - id: architecture
     kind: plaintext
     title: 시스템 구조

@@ -94,6 +94,7 @@ The API connects to NATS using a dynamically generated user credential:
 | GET         | `/api/v1/accounts/{operator}/{accountPublicKey}/users/{user}/creds`         | Export decorated NATS `.creds` payload for a persisted user                                                       |
 | GET/POST    | `/api/v1/asyncapi`                                                          | Read AsyncAPI checker status / create the default checker account                                                  |
 | POST        | `/api/v1/asyncapi/imports/{accountPublicKey}`                               | Enable or remove that account's read-only Stream Info API import (`{"enabled": true|false}`)                    |
+| POST        | `/api/v1/asyncapi/check`                                                     | Check uploaded AsyncAPI YAML files against the connected NATS accounts and JetStream resources                    |
 | POST/DELETE | `/api/v1/accounts/{operator}/{accountPublicKey}/users/{user}/publish-allow` | Add / remove user publish subjects (SQLite persisted)                                                             |     | POST | `/api/v1/accounts/{operator}/{accountPublicKey}/jetstream` | Enable or disable JetStream for an account (`{"enabled": true/false}`) |     | GET | `/api/v1/users` | List all users across all accounts (SQLite) |
 | POST        | `/api/v1/publish/as-user`                                                   | Publish as a specific user with subject permission check                                                          |
 

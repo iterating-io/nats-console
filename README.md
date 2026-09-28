@@ -27,6 +27,7 @@ NATS server must be configured with:
 - User credentials export and creds file download
 - JetStream stream and consumer CRUD
 - AsyncAPI menu provisions one `asyncapi-checker` account and selectively imports service-account Stream Info APIs
+- AsyncAPI menu accepts a folder with relative `messages/` and `schemas/` references, or individual YAML files, and reports JetStream checks for each root document
 - Dashboard publish test and live heartbeat
 - Role-based access: admin, operator, viewer
 
@@ -92,7 +93,7 @@ Access the console at `https://console.example.com` or `http://localhost:9222`.
 4. Create JetStream streams and consumers
 5. Export user credentials from UI (Copy or Download)
 6. Test publish operations in Dashboard
-7. Use AsyncAPI to create the checker account and enable Stream Info imports for the service accounts to inspect
+7. Use AsyncAPI to create the checker account and enable imports, then select an AsyncAPI folder (up to 20 YAML files, 2 MiB total) to check relative references and JetStream declarations against NATS
 
 ## Account Deletion
 

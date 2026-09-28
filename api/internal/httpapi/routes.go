@@ -28,6 +28,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/asyncapi", s.authHandler.WithAuth(s.accountsHandler.GetAsyncAPI))
 	mux.HandleFunc("POST /api/v1/asyncapi", s.authHandler.WithAuth(s.accountsHandler.EnsureAsyncAPI))
 	mux.HandleFunc("POST /api/v1/asyncapi/imports/{accountPublicKey}", s.authHandler.WithAuth(s.accountsHandler.ToggleAsyncAPIImport))
+	mux.HandleFunc("POST /api/v1/asyncapi/check", s.authHandler.WithAuth(s.checkAsyncAPIUploads))
 	mux.HandleFunc("POST /api/v1/accounts", s.authHandler.WithAuth(s.accountsHandler.CreateAccount))
 	mux.HandleFunc("DELETE /api/v1/accounts/{operator}/{accountPublicKey}", s.authHandler.WithAuth(s.accountsHandler.DeleteAccount))
 	mux.HandleFunc("GET /api/v1/accounts/{operator}/{accountPublicKey}/jwt", s.authHandler.WithAuth(s.accountsHandler.GetAccountJWT))

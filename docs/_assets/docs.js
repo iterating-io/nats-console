@@ -25,15 +25,76 @@
   document.querySelectorAll(".doc-sidebar").forEach(element => element.setAttribute("aria-label", labels.navigation));
   document.querySelectorAll(".doc-nav").forEach(element => element.setAttribute("aria-label", labels.contents));
 
-  function markNavigation() {
-    document.querySelectorAll(".doc-nav a").forEach(link => {
-      const active = link.hash && link.hash === window.location.hash;
-      if (active) link.setAttribute("aria-current", "location");
-      else link.removeAttribute("aria-current");
+  const navigationLinks = [...document.querySelectorAll(".doc-nav a")];
+  const sections = navigationLinks
+    .map(link => ({ link, section: link.hash ? document.getElementById(decodeURIComponent(link.hash.slice(1))) : null }))
+    .filter(item => item.section);
+
+  function setActiveSection(id, updateHash = false) {
+    let activeLink = null;
+    sections.forEach(({ link, section }) => {
+      const active = section.id === id;
+      if (active) {
+        link.setAttribute("aria-current", "location");
+        activeLink = link;
+      } else {
+        link.removeAttribute("aria-current");
+      }
     });
+    if (activeLink) {
+      const sidebar = activeLink.closest(".doc-sidebar");
+      if (sidebar) {
+        const sidebarBounds = sidebar.getBoundingClientRect();
+        const linkBounds = activeLink.getBoundingClientRect();
+        if (linkBounds.top < sidebarBounds.top) sidebar.scrollTop -= sidebarBounds.top - linkBounds.top;
+        else if (linkBounds.bottom > sidebarBounds.bottom) sidebar.scrollTop += linkBounds.bottom - sidebarBounds.bottom;
+      }
+      if (updateHash && window.history.replaceState) {
+        window.history.replaceState(null, "", `#${encodeURIComponent(id)}`);
+      }
+    }
   }
-  markNavigation();
-  window.addEventListener("hashchange", markNavigation);
+
+  function markNavigationFromHash() {
+    const id = decodeURIComponent(window.location.hash.slice(1));
+    if (sections.some(item => item.section.id === id)) setActiveSection(id);
+  }
+
+  if ("IntersectionObserver" in window && sections.length) {
+    let visibleSections = new Set();
+    const observer = new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) visibleSections.add(entry.target);
+        else visibleSections.delete(entry.target);
+      });
+
+      const active = sections
+        .map(({ section }, index) => ({ section, index }))
+        .filter(item => visibleSections.has(item.section))
+        .sort((a, b) => b.index - a.index)[0];
+      if (active) setActiveSection(active.section.id);
+      else {
+        const passed = sections.filter(({ section }) => section.getBoundingClientRect().top < 96);
+        if (passed.length) setActiveSection(passed[passed.length - 1].section.id);
+      }
+    }, { rootMargin: "-8% 0px -72% 0px", threshold: 0 });
+
+    sections.forEach(({ section }) => observer.observe(section));
+    window.addEventListener("hashchange", markNavigationFromHash);
+    window.addEventListener("load", markNavigationFromHash, { once: true });
+    markNavigationFromHash();
+    if (!window.location.hash) setActiveSection(sections[0].section.id);
+  } else {
+    function markNavigationOnScroll() {
+      const current = sections.filter(({ section }) => section.getBoundingClientRect().top < 120);
+      if (current.length) setActiveSection(current[current.length - 1].section.id);
+      else if (sections.length) setActiveSection(sections[0].section.id);
+    }
+    window.addEventListener("scroll", markNavigationOnScroll, { passive: true });
+    window.addEventListener("hashchange", markNavigationFromHash);
+    markNavigationFromHash();
+    markNavigationOnScroll();
+  }
 
   function report(viewer, message) {
     const status = viewer.querySelector(".sequence-status");

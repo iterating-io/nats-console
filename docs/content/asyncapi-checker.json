@@ -1,7 +1,7 @@
 {"blocks":[
-  {"type":"paragraph","text":"AsyncAPI 화면은 별도의 asyncapi-checker 계정을 준비하고 각 서비스 계정의 JetStream Stream Info 조회 권한을 선택적으로 연결합니다. 검사 계정은 서비스 계정의 이벤트를 구독하거나 스트림과 컨슈머를 변경하는 용도가 아닙니다."},
-  {"type":"list","ordered":true,"items":["AsyncAPI 화면에서 검사 계정 준비를 실행합니다. 이미 계정이 있으면 사용자와 상태 조회 접근을 확인합니다.","검사할 JetStream 사용 서비스 계정마다 Stream Info import를 활성화합니다.","서비스별 AsyncAPI 선언을 수정한 뒤 asyncapi/check-channels.py로 실제 채널과 source 연결을 검사합니다."]},
-  {"type":"paragraph","text":"import는 서비스 계정의 $JS.API.STREAM.INFO.> 요청을 검사 계정의 별칭으로 노출하며 activation token으로 보호됩니다. 검사 사용자는 허용된 별칭과 상태 조회 subject에 요청을 발행하고 _INBOX.>로 응답을 받습니다. 검사 대상 계정의 import를 끄면 해당 조회 경로를 제거합니다."},
-  {"type":"paragraph","text":"검사 도구는 문서의 x-jetstream.stream과 실제 스트림 subject를 비교하며 스트림을 만들거나 변경하지 않습니다. NATS_ACCOUNT를 지정하면 한 계정에 범위를 좁히고, 그 계정을 source로 참조하는 downstream 연결도 확인합니다. 자세한 판정 기준과 계정 경계는 기존 asyncapi/CHECKER.md에 있습니다."},
+  {"type":"paragraph","text":"AsyncAPI 화면에서 검사 계정을 준비하고, 검사할 서비스 계정마다 Stream Info import를 활성화한 뒤 실제 AsyncAPI YAML을 선택해 JetStream 선언을 확인할 수 있습니다. 검사 계정은 서비스 이벤트를 구독하거나 스트림과 컨シュ머를 변경하지 않습니다."},
+  {"type":"list","ordered":true,"items":["AsyncAPI 화면에서 검사 계정 준비를 실행합니다. 이미 계정이 있으면 사용자와 상태 조회 접근을 확인합니다.","검사할 JetStream 사용 서비스 계정마다 Stream Info import를 활성화합니다.","AsyncAPI 폴더를 선택해 messages/와 schemas/의 상대 경로 참조를 함께 보내거나 YAML 파일을 개별 선택합니다. 한 번에 YAML 최대 20개, 총 2 MiB까지 선택할 수 있습니다.","Check를 실행하면 각 루트 AsyncAPI 문서의 JetStream 선언을 NATS 계정과 스트림에 대조하고 파일 참조와 JSON Pointer 위치를 검사합니다."]},
+  {"type":"paragraph","text":"import는 서비스 계정의 Stream Info 요청을 검사 계정의 별칭으로 노출합니다. 검사 결과는 계정 존재 여부, JetStream 활성화, publish 권한, 스트림 및 subject 포함 여부를 보여 줍니다. x-source와 컨슈머 선언이 있으면 source 계정 연결과 컨슈머 준비 상태도 확인합니다. 검사 결과는 진단 정보이며 NATS 설정을 자동으로 바꾸지 않습니다."},
+  {"type":"paragraph","text":"폴더 업로드는 상대 $ref 파일과 JSON Pointer 대상이 업로드된 YAML에 있는지 확인합니다. 참조된 messages/와 schemas/ 파일은 별도 루트 문서로 중복 검사하지 않습니다. 검사 대상 YAML을 모두 선택하고 참조 경로와 대소문자를 유지하세요."},
   {"type":"links","items":[{"label":"스트림과 source 관리","section":"jetstream"},{"label":"시스템 구조","section":"architecture"}]}
 ]}
