@@ -195,10 +195,6 @@ func (h *Handler) AddStreamSource(w http.ResponseWriter, r *http.Request) {
 		writeJetStreamError(w, err, "stream not found")
 		return
 	}
-	if info.State.Consumers > 0 {
-		writeError(w, http.StatusConflict, "cannot add a source after consumers exist")
-		return
-	}
 	source := &nats.StreamSource{Name: req.SourceName}
 	if req.SourceAccountPublicKey != targetAccount {
 		source.External = &nats.ExternalStream{APIPrefix: "$JS.SOURCE." + req.SourceAccountPublicKey + ".API", DeliverPrefix: "$JS.SOURCE." + targetAccount}
@@ -261,10 +257,6 @@ func (h *Handler) UpdateStreamSource(w http.ResponseWriter, r *http.Request) {
 		writeJetStreamError(w, err, "stream not found")
 		return
 	}
-	if info.State.Consumers > 0 {
-		writeError(w, http.StatusConflict, "cannot update a source after consumers exist")
-		return
-	}
 	source := &nats.StreamSource{Name: req.SourceName}
 	if req.SourceAccountPublicKey != targetAccount {
 		source.External = &nats.ExternalStream{
@@ -324,10 +316,6 @@ func (h *Handler) RemoveStreamSourceFilter(w http.ResponseWriter, r *http.Reques
 	info, err := js.StreamInfo(name)
 	if err != nil {
 		writeJetStreamError(w, err, "stream not found")
-		return
-	}
-	if info.State.Consumers > 0 {
-		writeError(w, http.StatusConflict, "cannot update a source after consumers exist")
 		return
 	}
 	source := &nats.StreamSource{Name: req.SourceName}

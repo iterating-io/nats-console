@@ -532,7 +532,7 @@ export default function StreamDetail({
                                         <button
                                             type="button"
                                             className="delete-btn"
-                                            disabled={sourceLoading || consumers.length > 0}
+                                            disabled={sourceLoading}
                                             onClick={() => handleRemoveSource(source)}
                                         >
                                             Remove source
@@ -569,7 +569,7 @@ export default function StreamDetail({
                     )}
                 </div>
 
-                {consumers.length === 0 && (
+                <>
                     <div className="stack">
                         <strong>{sources.length === 0 ? "Add Source" : "Add Another Source"}</strong>
                         <select value={sourceAccountPublicKey} onChange={(e) => setSourceAccountPublicKey(e.target.value)}>
@@ -607,7 +607,7 @@ export default function StreamDetail({
                         )}
                         <button type="button" disabled={sourceLoading || !sourceName} onClick={handleAddSource}>{sourceLoading ? "Adding…" : "Add Source"}</button>
                     </div>
-                )}
+                </>
 
                 {(stream.config || stream.state) && (
                     <div style={{ marginTop: "0.5rem" }}>
