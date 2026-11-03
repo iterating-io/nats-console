@@ -136,7 +136,7 @@ export NATS_SYS_NKEY=%s
 export OPERATOR_NKEY=%s
 export ADMIN_ID=admin
 export ADMIN_PASSWORD=admin
-export ALLOWED_ORIGINS=http://localhost
+export ALLOWED_ORIGINS=
 
 # WEB
 export WEB_BASE_PATH=/

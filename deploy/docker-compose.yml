@@ -23,7 +23,7 @@ services:
             OPERATOR_NKEY: "${OPERATOR_NKEY:?OPERATOR_NKEY must be exported by direnv}"
             ADMIN_ID: "${ADMIN_ID:?ADMIN_ID must be exported by direnv}"
             ADMIN_PASSWORD: "${ADMIN_PASSWORD:?ADMIN_PASSWORD must be exported by direnv}"
-            ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-http://localhost}"
+            ALLOWED_ORIGINS: "${ALLOWED_ORIGINS:-}"
             DB_PATH: "/app/data/console.db"
         ports:
             - "9222:9222"

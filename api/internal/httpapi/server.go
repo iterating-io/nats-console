@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -39,11 +40,7 @@ type Server struct {
 func New(cfg config.Config, jwtSvc auth.JWTService, natsConn natsClient, st *store.Store) *Server {
 	upgrader := websocket.Upgrader{
 		CheckOrigin: func(r *http.Request) bool {
-			allowed := strings.TrimSpace(cfg.AllowedOrigins)
-			if allowed == "*" || allowed == "" {
-				return true
-			}
-			return strings.EqualFold(r.Header.Get("Origin"), allowed)
+			return originAllowed(r, cfg.AllowedOrigins)
 		},
 	}
 	server := &Server{cfg: cfg, jwtSvc: jwtSvc, natsConn: natsConn, store: st}
@@ -112,19 +109,51 @@ func (s *Server) RegisterCheckerStatusService(nc *nats.Conn) error {
 func (s *Server) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if s.cfg.AllowedOrigins == "*" && origin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-		} else {
-			w.Header().Set("Access-Control-Allow-Origin", s.cfg.AllowedOrigins)
+		if origin != "" && originAllowed(r, s.cfg.AllowedOrigins) && !sameRequestHost(r, origin) {
+			w.Header().Add("Vary", "Origin")
+			if strings.TrimSpace(s.cfg.AllowedOrigins) == "*" {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			} else {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+			}
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 		}
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// originAllowed permits same-host browser requests by default. AllowedOrigins
+// adds exact origins as a comma-separated list; '*' explicitly allows any origin.
+func originAllowed(r *http.Request, allowedOrigins string) bool {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		return true
+	}
+	if sameRequestHost(r, origin) {
+		return true
+	}
+	for _, allowed := range strings.Split(allowedOrigins, ",") {
+		allowed = strings.TrimSpace(allowed)
+		if allowed == "*" {
+			return true
+		}
+		if allowed != "" && strings.EqualFold(origin, allowed) {
+			return true
+		}
+	}
+	return false
+}
+
+// Compare hosts rather than schemes so WebSocket upgrades work behind TLS
+// termination, where Origin may be https://host while the backend sees HTTP.
+func sameRequestHost(r *http.Request, origin string) bool {
+	parsed, err := url.Parse(origin)
+	return err == nil && parsed.Host != "" && r.Host != "" && strings.EqualFold(parsed.Host, r.Host)
 }
 
 func (s *Server) LoadFromNATS() {

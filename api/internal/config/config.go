@@ -24,7 +24,7 @@ func Load() Config {
 		NATSURL:        getEnv("NATS_URL", ""),
 		NATSSysNKey:    getEnv("NATS_SYS_NKEY", ""),
 		OperatorNKey:   getEnv("OPERATOR_NKEY", ""),
-		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "*"),
+		AllowedOrigins: getEnv("ALLOWED_ORIGINS", ""),
 		AdminID:        getEnv("ADMIN_ID", ""),
 		AdminPassword:  getEnv("ADMIN_PASSWORD", ""),
 	}

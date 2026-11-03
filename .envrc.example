@@ -7,7 +7,7 @@ export NATS_SYS_NKEY=Sxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 export OPERATOR_NKEY=SOxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 export ADMIN_ID=admin
 export ADMIN_PASSWORD=securepassword
-export ALLOWED_ORIGINS=http://localhost
+export ALLOWED_ORIGINS=
 
 # WEB
 export WEB_BASE_PATH=/

@@ -59,7 +59,7 @@ If legacy `deploy/keys/js-account.nk` or `deploy/keys/js-account.jwt` files are 
 | `OPERATOR_NKEY`   | (required) | Operator NKey seed for signing account JWTs and console authentication tokens |
 | `ADMIN_ID`        | (required) | Admin console login username                                                  |
 | `ADMIN_PASSWORD`  | (required) | Admin console login password                                                  |
-| `ALLOWED_ORIGINS` | `*`        | CORS allowed origins for web frontend                                         |
+| `ALLOWED_ORIGINS` | (empty)    | Optional comma-separated extra origins; same-host requests are allowed by default; `*` allows all origins |
 
 Database path is fixed at `/app/data/console.db` inside container.
 

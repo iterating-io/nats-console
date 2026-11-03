@@ -58,7 +58,7 @@ func TestLoadUsesFallbacksForMissingOrEmptyValues(t *testing.T) {
 	if cfg.OperatorNKey != "" {
 		t.Fatalf("unexpected OperatorNKey: %q", cfg.OperatorNKey)
 	}
-	if cfg.AllowedOrigins != "*" {
+	if cfg.AllowedOrigins != "" {
 		t.Fatalf("unexpected AllowedOrigins: %q", cfg.AllowedOrigins)
 	}
 	if cfg.AdminID != "" {

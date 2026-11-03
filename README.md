@@ -76,7 +76,7 @@ Environment variables must be provided from your existing NATS operator/account 
 - `OPERATOR_NKEY`: Operator NKey seed (pre-provisioned in NATS)
 - `ADMIN_ID`: Console admin username (e.g., `admin`)
 - `ADMIN_PASSWORD`: Console admin password
-- `ALLOWED_ORIGINS`: CORS allowed origins (e.g., your domain)
+- `ALLOWED_ORIGINS`: optional comma-separated extra origins for cross-origin access; same-host requests are allowed by default, and `*` explicitly allows all origins
 - `WEB_BASE_PATH`: URL base path (default: `/`, optional)
 
 Access the console at `https://console.example.com` or `http://localhost:9222`.
@@ -124,7 +124,7 @@ Configuration through environment variables:
 | OPERATOR_NKEY   | (required) | Operator NKey seed                  |
 | ADMIN_ID        | (required) | Admin console username              |
 | ADMIN_PASSWORD  | (required) | Admin console password              |
-| ALLOWED_ORIGINS | `*`        | CORS allowed origins                |
+| ALLOWED_ORIGINS | (empty)    | Extra CORS origins, comma-separated; same-host requests are allowed by default |
 | WEB_BASE_PATH   | `/`        | URL base path (e.g., /nats-console) |
 
 ## Account Management

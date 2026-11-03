@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -56,7 +57,7 @@ func (f *fakeNATS) Publish(subject string, _ []byte) error {
 }
 
 func TestWithCORS(t *testing.T) {
-	s := &Server{cfg: config.Config{AllowedOrigins: "*"}}
+	s := &Server{cfg: config.Config{AllowedOrigins: "https://app.example"}}
 	hits := 0
 	handler := s.withCORS(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		hits++
@@ -76,10 +77,51 @@ func TestWithCORS(t *testing.T) {
 	}
 
 	req = httptest.NewRequest(http.MethodOptions, "/", nil)
+	req.Header.Set("Origin", "https://app.example")
 	rec = httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {
 		t.Fatalf("unexpected status for preflight: %d", rec.Code)
+	}
+	if got := rec.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, "PATCH") {
+		t.Fatalf("PATCH missing from preflight methods: %q", got)
+	}
+}
+
+func TestOriginAllowed(t *testing.T) {
+	tests := []struct {
+		name, host, origin, configured string
+		want                           bool
+	}{
+		{"same host across proxy TLS termination", "console.example", "https://console.example", "", true},
+		{"configured extra origin", "api.example", "https://app.example", "https://app.example, https://other.example", true},
+		{"unconfigured origin", "api.example", "https://evil.example", "https://app.example", false},
+		{"explicit wildcard", "api.example", "https://evil.example", "*", true},
+		{"missing origin", "api.example", "", "", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "http://"+tt.host+"/", nil)
+			if tt.origin != "" {
+				req.Header.Set("Origin", tt.origin)
+			}
+			if got := originAllowed(req, tt.configured); got != tt.want {
+				t.Fatalf("originAllowed() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestWithCORSDoesNotSetHeadersForSameOriginOrRejectedOrigin(t *testing.T) {
+	s := &Server{cfg: config.Config{}}
+	for _, origin := range []string{"http://console.example", "https://evil.example"} {
+		req := httptest.NewRequest(http.MethodGet, "http://console.example/", nil)
+		req.Header.Set("Origin", origin)
+		rec := httptest.NewRecorder()
+		s.withCORS(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {})).ServeHTTP(rec, req)
+		if got := rec.Header().Get("Access-Control-Allow-Origin"); got != "" {
+			t.Fatalf("unexpected allow origin for %q: %q", origin, got)
+		}
 	}
 }
 
