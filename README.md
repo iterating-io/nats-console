@@ -41,15 +41,15 @@ GHCR using the short commit SHA as its tag:
 ghcr.io/iterating-io/nats-console/console:<short-sha>
 ```
 
-The image is built with `WEB_BASE_PATH=/console` for the
-`https://nats.iterating.io/console` ingress path. The infrastructure repository
+The image is built with `WEB_BASE_PATH=/` for the
+`https://nats-console.iterating.io` ingress path. The infrastructure repository
 copies that image to the internal Kubernetes registry before deployment.
 
 For a local production-image build:
 
 ```bash
 docker build \
-  --build-arg WEB_BASE_PATH=/console \
+  --build-arg WEB_BASE_PATH=/ \
   -f deploy/dockerfile.console \
   -t nats-console:latest .
 ```

@@ -20,13 +20,13 @@ The dev server starts at `http://localhost:5173`.
 `WEB_BASE_PATH` controls both web mount path and API prefix:
 
 - `/` -> web on `/`, API on `/api`
-- `/console` -> web on `/console`, API on `/console/api`
+- `/app` -> web on `/app`, API on `/app/api`
 - `/test/` -> web on `/test`, API on `/test/api`
 
 The Vite dev server proxies `<WEB_BASE_PATH>/api` to `http://localhost:8080`, so no separate API base variable is needed.
 
 ```bash
-WEB_BASE_PATH=/console npm run dev
+WEB_BASE_PATH=/app npm run dev
 ```
 
 ## Build

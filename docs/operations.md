@@ -146,8 +146,8 @@ when manually dispatched from `main`. It pushes the image to:
 ghcr.io/iterating-io/nats-console/console:<short-sha>
 ```
 
-The workflow uses `WEB_BASE_PATH=/console`, which matches the production
-ingress at `https://nats.iterating.io/console`. It does not access runtime
+The workflow uses `WEB_BASE_PATH=/`, which matches the production
+ingress at `https://nats-console.iterating.io`. It does not access runtime
 secrets or the private Kubernetes registry. The infrastructure repository pulls
 the resulting ARM64 image and copies it to the private registry before Helm
 deployment.

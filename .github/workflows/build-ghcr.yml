@@ -42,7 +42,7 @@ jobs:
                   file: deploy/dockerfile.console
                   platforms: linux/arm64
                   push: true
-                  build-args: WEB_BASE_PATH=/console
+                  build-args: WEB_BASE_PATH=/
                   tags: ${{ steps.meta.outputs.tags }}
                   labels: ${{ steps.meta.outputs.labels }}
 
