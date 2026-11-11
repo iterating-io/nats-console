@@ -93,7 +93,7 @@ Access the console at `https://console.example.com` or `http://localhost:9222`.
 4. Create JetStream streams and consumers
 5. Export user credentials from UI (Copy or Download)
 6. Test publish operations in Dashboard
-7. Use AsyncAPI to create the checker account and enable imports, then select an AsyncAPI folder (up to 20 YAML files, 2 MiB total) to check relative references and JetStream declarations against NATS
+7. Use AsyncAPI to create the checker account and enable imports, then select an AsyncAPI folder to check relative references and JetStream declarations against NATS
 
 ## Account Deletion
 

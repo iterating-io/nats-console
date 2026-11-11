@@ -40,6 +40,18 @@ server {
 	root /usr/share/nginx/html;
 	index index.html;
 
+	location = /api/v1/asyncapi/check {
+		client_max_body_size 0;
+		proxy_pass http://localhost:9322;
+		proxy_http_version 1.1;
+		proxy_set_header Upgrade $http_upgrade;
+		proxy_set_header Connection $connection_upgrade;
+		proxy_set_header Host $host;
+		proxy_set_header X-Real-IP $remote_addr;
+		proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto $scheme;
+	}
+
 	location /api/ {
 		proxy_pass http://localhost:9322;
 		proxy_http_version 1.1;
@@ -78,6 +90,19 @@ server {
 
 	location = ${base_path} {
 		return 301 ${base_path}/;
+	}
+
+	location = ${api_prefix}/v1/asyncapi/check {
+		client_max_body_size 0;
+		rewrite ^${base_path}(/api/.*)$ \$1 break;
+		proxy_pass http://localhost:9322;
+		proxy_http_version 1.1;
+		proxy_set_header Upgrade \$http_upgrade;
+		proxy_set_header Connection \$connection_upgrade;
+		proxy_set_header Host \$host;
+		proxy_set_header X-Real-IP \$remote_addr;
+		proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+		proxy_set_header X-Forwarded-Proto \$scheme;
 	}
 
 	location ${api_prefix}/ {

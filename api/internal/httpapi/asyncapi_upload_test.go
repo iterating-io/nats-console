@@ -1,9 +1,45 @@
 package httpapi
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+func TestCheckAsyncAPIUploadsHasNoFileCountOrSizeLimit(t *testing.T) {
+	files := make([]uploadedAsyncAPIFile, 21)
+	for i := range files {
+		files[i] = uploadedAsyncAPIFile{
+			Name:    fmt.Sprintf("asyncapi-%d.yaml", i),
+			Content: "asyncapi: 3.0.0\nchannels: {}\n",
+		}
+	}
+	files[0].Content += "x-padding: " + strings.Repeat("a", (2<<20)+1) + "\n"
+	body, err := json.Marshal(map[string]any{"files": files})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/asyncapi/check", bytes.NewReader(body))
+	response := httptest.NewRecorder()
+	(&Server{}).checkAsyncAPIUploads(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected oversized 21-file upload to pass, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestCheckAsyncAPIUploadsRequiresAtLeastOneYAMLFile(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/api/v1/asyncapi/check", strings.NewReader(`{"files":[]}`))
+	response := httptest.NewRecorder()
+	(&Server{}).checkAsyncAPIUploads(response, request)
+	if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "at least one YAML file") {
+		t.Fatalf("expected missing-file error, got %d: %s", response.Code, response.Body.String())
+	}
+}
 
 func TestParseUploadedAsyncAPI(t *testing.T) {
 	document := `asyncapi: 3.1.0

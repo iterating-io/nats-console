@@ -14,8 +14,6 @@ import (
 	"github.com/iterating-io/nats-console/api/internal/accounts"
 )
 
-const maxAsyncAPIUploadBytes = 2 << 20
-
 type uploadedAsyncAPIFile struct {
 	Name    string `json:"name"`
 	Content string `json:"content"`
@@ -42,17 +40,15 @@ type uploadFileResult struct {
 }
 
 func (s *Server) checkAsyncAPIUploads(w http.ResponseWriter, r *http.Request) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxAsyncAPIUploadBytes)
 	defer r.Body.Close()
 	var request struct {
 		Files []uploadedAsyncAPIFile `json:"files"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil || len(request.Files) == 0 || len(request.Files) > 20 {
-		http.Error(w, "expected 1 to 20 YAML files within 2 MiB", http.StatusBadRequest)
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil || len(request.Files) == 0 {
+		http.Error(w, "expected at least one YAML file", http.StatusBadRequest)
 		return
 	}
 	files := make(map[string][]byte, len(request.Files))
-	totalBytes := 0
 	for _, file := range request.Files {
 		if !validAsyncAPIPath(file.Name) {
 			http.Error(w, "file names must be relative YAML paths", http.StatusBadRequest)
@@ -67,11 +63,6 @@ func (s *Server) checkAsyncAPIUploads(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		data := []byte(file.Content)
-		totalBytes += len(data)
-		if totalBytes > maxAsyncAPIUploadBytes {
-			http.Error(w, "expected 1 to 20 YAML files within 2 MiB", http.StatusBadRequest)
-			return
-		}
 		files[file.Name] = data
 	}
 	results := make([]uploadFileResult, 0, len(request.Files))
