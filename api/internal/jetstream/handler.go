@@ -486,6 +486,21 @@ func (h *Handler) ListConsumers(w http.ResponseWriter, r *http.Request) {
 		MaxDeliver    int    `json:"maxDeliver"`
 		MaxAckPending int    `json:"maxAckPending"`
 		Type          string `json:"type"`
+		Position      struct {
+			Delivered struct {
+				StreamSeq   uint64     `json:"streamSeq"`
+				ConsumerSeq uint64     `json:"consumerSeq"`
+				LastActive  *time.Time `json:"lastActive,omitempty"`
+			} `json:"delivered"`
+			AckFloor struct {
+				StreamSeq   uint64 `json:"streamSeq"`
+				ConsumerSeq uint64 `json:"consumerSeq"`
+			} `json:"ackFloor"`
+			NumAckPending  int    `json:"numAckPending"`
+			NumPending     uint64 `json:"numPending"`
+			NumRedelivered int    `json:"numRedelivered"`
+			NumWaiting     int    `json:"numWaiting"`
+		} `json:"position"`
 	}
 	consumers := []consumerInfo{}
 	for info := range js.ConsumersInfo(stream, nats.Context(ctx)) {
@@ -493,13 +508,23 @@ func (h *Handler) ListConsumers(w http.ResponseWriter, r *http.Request) {
 		if info.Config.DeliverSubject != "" {
 			consumerType = "push"
 		}
-		consumers = append(consumers, consumerInfo{
+		consumer := consumerInfo{
 			Name: info.Name, FilterSubject: info.Config.FilterSubject,
 			DeliverPolicy: consumerDeliverPolicyName(info.Config.DeliverPolicy),
 			AckPolicy:     info.Config.AckPolicy.String(), AckWait: info.Config.AckWait.String(),
 			MaxDeliver: info.Config.MaxDeliver, MaxAckPending: info.Config.MaxAckPending,
 			Type: consumerType,
-		})
+		}
+		consumer.Position.Delivered.StreamSeq = info.Delivered.Stream
+		consumer.Position.Delivered.ConsumerSeq = info.Delivered.Consumer
+		consumer.Position.Delivered.LastActive = info.Delivered.Last
+		consumer.Position.AckFloor.StreamSeq = info.AckFloor.Stream
+		consumer.Position.AckFloor.ConsumerSeq = info.AckFloor.Consumer
+		consumer.Position.NumAckPending = info.NumAckPending
+		consumer.Position.NumPending = info.NumPending
+		consumer.Position.NumRedelivered = info.NumRedelivered
+		consumer.Position.NumWaiting = info.NumWaiting
+		consumers = append(consumers, consumer)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"consumers": consumers})
 }

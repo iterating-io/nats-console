@@ -600,6 +600,27 @@ button:disabled {
     gap: 8px;
 }
 
+.consumer-name-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+}
+
+.consumer-name-toggle:hover {
+    color: #f18f55;
+}
+
+.consumer-name-toggle span {
+    color: var(--sand);
+    font-size: 18px;
+    line-height: 1;
+}
+
 .consumer-summary {
     display: flex;
     flex-wrap: wrap;
@@ -648,6 +669,41 @@ button:disabled {
     overflow-wrap: anywhere;
 }
 
+.consumer-position {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.consumer-position-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin: 0;
+}
+
+.consumer-position-grid > div {
+    padding: 8px;
+    border-radius: 7px;
+    background: rgba(255, 255, 255, 0.035);
+}
+
+.consumer-position-grid dt {
+    color: var(--sand);
+    font-size: 11px;
+    text-transform: uppercase;
+}
+
+.consumer-position-grid dd {
+    margin: 4px 0 0;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+}
+
 .consumer-edit-form {
     display: flex;
     flex-direction: column;
@@ -665,6 +721,10 @@ button:disabled {
     }
 
     .consumer-settings {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .consumer-position-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 

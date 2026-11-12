@@ -11,6 +11,22 @@ export type Consumer = {
     maxDeliver: number;
     maxAckPending: number;
     type: "pull" | "push";
+    position?: ConsumerPosition;
+};
+
+type ConsumerSequence = {
+    streamSeq: number;
+    consumerSeq: number;
+    lastActive?: string;
+};
+
+type ConsumerPosition = {
+    delivered: ConsumerSequence;
+    ackFloor: Pick<ConsumerSequence, "streamSeq" | "consumerSeq">;
+    numAckPending: number;
+    numPending: number;
+    numRedelivered: number;
+    numWaiting: number;
 };
 
 type UpdateSettings = Pick<Consumer, "filterSubject" | "ackWait" | "maxDeliver" | "maxAckPending">;
@@ -19,9 +35,10 @@ type Props = {
     consumers: Consumer[];
     onDelete: (name: string) => void;
     onUpdate: (name: string, settings: UpdateSettings) => Promise<boolean>;
+    onRefresh: () => Promise<Consumer[] | null>;
 };
 
-export default function ConsumerList({ consumers, onDelete, onUpdate }: Props) {
+export default function ConsumerList({ consumers, onDelete, onUpdate, onRefresh }: Props) {
     const [editing, setEditing] = useState<string | null>(null);
 
     return (
@@ -35,6 +52,7 @@ export default function ConsumerList({ consumers, onDelete, onUpdate }: Props) {
                     <ConsumerItem
                         key={consumer.name}
                         consumer={consumer}
+                        onRefresh={onRefresh}
                         editing={editing === consumer.name}
                         onEdit={() => setEditing(consumer.name)}
                         onCancel={() => setEditing(null)}
@@ -52,6 +70,7 @@ export default function ConsumerList({ consumers, onDelete, onUpdate }: Props) {
 
 type ConsumerItemProps = {
     consumer: Consumer;
+    onRefresh: () => Promise<Consumer[] | null>;
     editing: boolean;
     onEdit: () => void;
     onCancel: () => void;
@@ -59,12 +78,39 @@ type ConsumerItemProps = {
     onUpdate: (settings: UpdateSettings) => Promise<void>;
 };
 
-function ConsumerItem({ consumer, editing, onEdit, onCancel, onDelete, onUpdate }: ConsumerItemProps) {
+function ConsumerItem({ consumer, onRefresh, editing, onEdit, onCancel, onDelete, onUpdate }: ConsumerItemProps) {
     const [filterSubject, setFilterSubject] = useState(consumer.filterSubject);
     const [ackWait, setAckWait] = useState(consumer.ackWait);
     const [maxDeliver, setMaxDeliver] = useState(String(consumer.maxDeliver));
     const [maxAckPending, setMaxAckPending] = useState(String(consumer.maxAckPending));
     const [error, setError] = useState("");
+    const [showPosition, setShowPosition] = useState(false);
+    const [position, setPosition] = useState(consumer.position);
+    const [positionError, setPositionError] = useState("");
+    const [refreshingPosition, setRefreshingPosition] = useState(false);
+
+    const togglePosition = async () => {
+        if (showPosition) {
+            setShowPosition(false);
+            return;
+        }
+        setShowPosition(true);
+        setPositionError("");
+        setRefreshingPosition(true);
+        try {
+            const refreshedConsumers = await onRefresh();
+            const refreshedConsumer = refreshedConsumers?.find((item) => item.name === consumer.name);
+            if (refreshedConsumer) {
+                setPosition(refreshedConsumer.position);
+            } else {
+                setPositionError("Could not refresh consumer position.");
+            }
+        } catch {
+            setPositionError("Could not refresh consumer position.");
+        } finally {
+            setRefreshingPosition(false);
+        }
+    };
 
     const submit = async (event: SubmitEvent<HTMLFormElement>) => {
         event.preventDefault();
@@ -91,7 +137,16 @@ function ConsumerItem({ consumer, editing, onEdit, onCancel, onDelete, onUpdate 
         <li className="list-row consumer-card">
             <div className="consumer-card-header">
                 <div>
-                    <strong>{consumer.name}</strong>
+                    <button
+                        type="button"
+                        className="consumer-name-toggle"
+                        onClick={togglePosition}
+                        aria-expanded={showPosition}
+                        aria-label={`${showPosition ? "Hide" : "Show"} position for ${consumer.name}`}
+                    >
+                        <strong>{consumer.name}</strong>
+                        <span aria-hidden="true">{showPosition ? "−" : "+"}</span>
+                    </button>
                     <div className="consumer-summary">
                         <span className="badge">{consumer.type}</span>
                         <span className="badge">{consumer.ackPolicy} ACK</span>
@@ -119,6 +174,31 @@ function ConsumerItem({ consumer, editing, onEdit, onCancel, onDelete, onUpdate 
                     <div><dt>Max deliveries</dt><dd>{consumer.maxDeliver === -1 ? "Unlimited" : consumer.maxDeliver}</dd></div>
                     <div><dt>Max ACK pending</dt><dd>{consumer.maxAckPending}</dd></div>
                 </dl>
+            )}
+
+            {showPosition && (
+                <div className="consumer-position">
+                    <strong>Current position</strong>
+                    {refreshingPosition ? (
+                        <p className="muted">Refreshing position...</p>
+                    ) : positionError ? (
+                        <p className="error">{positionError}</p>
+                    ) : position ? (
+                        <dl className="consumer-position-grid">
+                            <div><dt>Last delivered · stream seq</dt><dd>#{position.delivered.streamSeq}</dd></div>
+                            <div><dt>Last delivered · consumer seq</dt><dd>#{position.delivered.consumerSeq}</dd></div>
+                            <div><dt>ACK floor · stream seq</dt><dd>#{position.ackFloor.streamSeq}</dd></div>
+                            <div><dt>ACK floor · consumer seq</dt><dd>#{position.ackFloor.consumerSeq}</dd></div>
+                            <div><dt>Messages pending</dt><dd>{position.numPending}</dd></div>
+                            <div><dt>ACK pending</dt><dd>{position.numAckPending}</dd></div>
+                            <div><dt>Redelivered</dt><dd>{position.numRedelivered}</dd></div>
+                            <div><dt>Waiting pull requests</dt><dd>{position.numWaiting}</dd></div>
+                            <div><dt>Last delivery activity</dt><dd>{position.delivered.lastActive ? new Date(position.delivered.lastActive).toLocaleString() : "Unknown"}</dd></div>
+                        </dl>
+                    ) : (
+                        <p className="muted">Position data is unavailable.</p>
+                    )}
+                </div>
             )}
 
             {editing && (

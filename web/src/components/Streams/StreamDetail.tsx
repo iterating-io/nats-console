@@ -63,7 +63,7 @@ export default function StreamDetail({
         return `${path}${separator}accountPublicKey=${encodeURIComponent(accountPublicKey)}`;
     };
 
-    const fetchConsumers = async (name: string) => {
+    const fetchConsumers = async (name: string): Promise<Consumer[] | null> => {
         const consumersRes = await fetch(
             withAccountScope(
                 `${apiBase}/api/v1/streams/${encodeURIComponent(name)}/consumers`,
@@ -72,16 +72,18 @@ export default function StreamDetail({
         );
         if (consumersRes.status === 401) {
             onAuthError();
-            return;
+            return null;
         }
         if (!consumersRes.ok) {
             setError("Failed to load consumers.");
-            return;
+            return null;
         }
         const consumersData = (await consumersRes.json()) as {
             consumers: Consumer[];
         };
-        setConsumers(consumersData.consumers || []);
+        const loadedConsumers = consumersData.consumers || [];
+        setConsumers(loadedConsumers);
+        return loadedConsumers;
     };
 
     useEffect(() => {
@@ -667,6 +669,7 @@ export default function StreamDetail({
                         consumers={consumers}
                         onDelete={handleConsumerDelete}
                         onUpdate={handleConsumerUpdate}
+                        onRefresh={() => fetchConsumers(streamName)}
                     />
                 </div>
             </div>
