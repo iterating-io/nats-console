@@ -1,8 +1,8 @@
-FROM node:22.23.4-alpine AS web-builder
+FROM node:26.13.1-alpine AS web-builder
 WORKDIR /src/web
 
-COPY web/package*.json ./
-RUN npm install
+COPY web/package*.json web/.npmrc ./
+RUN npm ci
 
 COPY web/ ./
 RUN npm run build

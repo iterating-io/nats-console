@@ -1,8 +1,8 @@
-FROM node:22.23.4-alpine
+FROM node:26.13.1-alpine
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm install
+COPY package*.json .npmrc ./
+RUN npm ci
 
 COPY . .
 EXPOSE 5173

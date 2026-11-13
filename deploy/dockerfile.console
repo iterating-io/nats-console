@@ -1,12 +1,12 @@
 # Build web (React)
-FROM node:22.23.4-alpine AS web-builder
+FROM node:26.13.1-alpine AS web-builder
 WORKDIR /src/web
 
 ARG WEB_BASE_PATH=/
 ENV WEB_BASE_PATH=${WEB_BASE_PATH}
 
-COPY web/package*.json ./
-RUN npm install
+COPY web/package*.json web/.npmrc ./
+RUN npm ci
 
 COPY web/ ./
 RUN npm run build
