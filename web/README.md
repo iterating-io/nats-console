@@ -4,7 +4,7 @@ React + TypeScript + Vite frontend for NATS Console.
 
 ## Prerequisites
 
-- Node.js 26.13.1 LTS (`.nvmrc`)
+- Node.js 24.22.3 LTS (`.nvmrc`)
 - The API server running at `http://localhost:8080` (see root `README.md` for setup)
 
 ## Development Setup

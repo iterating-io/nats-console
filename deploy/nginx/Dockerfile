@@ -1,4 +1,4 @@
-FROM node:26.13.1-alpine AS web-builder
+FROM node:24.22.3-alpine AS web-builder
 WORKDIR /src/web
 
 COPY web/package*.json web/.npmrc ./

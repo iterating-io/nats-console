@@ -1,5 +1,5 @@
 # Build web (React)
-FROM node:26.13.1-alpine AS web-builder
+FROM node:24.22.3-alpine AS web-builder
 WORKDIR /src/web
 
 ARG WEB_BASE_PATH=/

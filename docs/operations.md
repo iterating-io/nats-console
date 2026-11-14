@@ -97,7 +97,7 @@ Database path is fixed at `/app/data/console.db` inside container.
 
 A single multi-stage image packages the full application:
 
-1. **web-builder** (Node 26.13.1 LTS) — `npm run build` produces `/src/web/dist`
+1. **web-builder** (Node 24.22.3 LTS) — `npm run build` produces `/src/web/dist`
 2. **api-builder** (Go 1.25) — compiles `nats-console-api` binary
 3. **Final** (Nginx 1.27) — serves static files, proxies `<WEB_BASE_PATH>/api/` to `localhost:9322/api/`
 
